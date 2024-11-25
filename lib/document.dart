@@ -1,3 +1,4 @@
+import 'dart:ffi' show NativeCallable, Pointer, Void, Uint32, Uint32Pointer, nullptr;
 import 'dart:io';
 import 'dart:math';
 
@@ -63,6 +64,7 @@ class Document {
   late TextPainter tp;
   late String path;
 
+  late NativeCallable<EditStringUtf8Callback> _bufferReaderWrapped;
   final TreeSitter treeSitter;
 
   Map<String, Color> syntaxColoring;
@@ -75,10 +77,12 @@ class Document {
     tp.text = TextSpan(text: '\u2588\n\u2588', style: style);
     tp.layout();
     renderedGlyphHeight = tp.height / 2;
+
+    _bufferReaderWrapped = NativeCallable<EditStringUtf8Callback>.isolateLocal(_bufferReaderCallback);
   }
 
   Future<bool> openFile(String path) async {
-    treeSitter.setLanguage(TreeSitterLanguage.c);
+    treeSitter.setLanguage(TreeSitterLanguage.javascript);
     this.path = path;
     lines = await File(this.path).readAsLines();
     widths = List.filled(lines.length, 0, growable: true);
@@ -257,16 +261,49 @@ class Document {
     }
   }
 
+  Pointer<Utf8> _bufferReaderCallback(Pointer<Void> payload, int byteOffset, TSPoint point, Pointer<Uint32> dataRead) {
+    var (lineNum, colNum) = _getLineAndColumnFromByteOffset(byteOffset);
+    // we want to be sure we don't return a split graphmeme/character
+    var line = lines[lineNum];
+    var linePartFirst = line.substring(0, colNum);
+    var linePartNoNl = line.substring(colNum);
+    assert(linePartNoNl.characters.length + linePartFirst.characters.length == line.characters.length);
+    var linePart = linePartNoNl + '\n';
+    var zz = linePart.toNativeUtf8();
+    assert(zz.length == linePart.length);
+    dataRead.value = zz.length;
+    return zz;
+  }
+
   void _insertText(String text) {
+    assert(!text.contains('\n'));
     var l = lines[cursor.line];
     var l1st = l.characters.take(cursor.column);
     var l2nd = l.characters.skip(cursor.column).take(l.characters.length - cursor.column);
+    // Careful with multibyte chars. tree-sitter is byte based.
+    var textByteOffset = _getLineByteOffset(cursor.line) + l1st.length;
+    var textByteLength = text.length;
+    var cursorLine = cursor.line;
+
     lines[cursor.line] = "$l1st$text$l2nd";
     tp.text = TextSpan(text: lines[cursor.line], style: style);
     tp.layout();
     widths[cursor.line] = tp.width;
     cursor.column += text.characters.length;
     assert(lines.length == widths.length);
+
+    // pass the edit to tree-sitter as well
+    assert(treeSitter.editString(
+        textByteOffset,
+        textByteOffset,
+        textByteOffset + textByteLength,
+        cursorLine,
+        l1st.length,
+        cursorLine,
+        l1st.length,
+        cursorLine,
+        l1st.length + textByteLength,
+        _bufferReaderWrapped.nativeFunction));
   }
 
   Size getSize() {
@@ -466,6 +503,20 @@ class Document {
       offset += lines[i].length + 1;
     }
     return offset;
+  }
+
+  // The column returned is in bytes, not characters!
+  (int, int) _getLineAndColumnFromByteOffset(int byteOffset) {
+    var line = 0;
+    while (byteOffset > 0) {
+      if (byteOffset - (lines[line].length + 1) < 0) {
+        break;
+      } else {
+        byteOffset -= lines[line].length + 1;
+        line++;
+      }
+    }
+    return (line, byteOffset);
   }
 
   (int, int) _splitStringByHighlightsAndAddToList(String string, List<InlineSpan> spans, int byteOffset,
