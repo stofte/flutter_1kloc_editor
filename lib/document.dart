@@ -125,6 +125,7 @@ class Document {
 
   bool moveCursorUp() {
     if (cursor.line > 0) {
+      // We try to find the closest match to the current visual column offset in the line up.
       var colOffset = _currentColOffset();
       cursor.line--;
       cursor.column = _findCharIndexInStringFromOffset(lines[cursor.line], colOffset, 0);
