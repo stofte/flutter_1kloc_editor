@@ -52,6 +52,25 @@ class Document {
 
   // Inserts the text at the cursor position
   (Offset, DocumentLocation) insertText(String text) {
+    if (hasSelection()) {
+      // Replace the selection with the inserted text, by first deleting the entire selection,
+      // move the cursor to the start of the selection (earliest in the document), and then
+      // do the standard insert text treatment.
+      var selStart = getSelectionStart();
+      var selEnd = getSelectionEnd();
+      var startLine = lines[selStart.line];
+      var endLine = lines[selEnd.line];
+      var startLineRest = startLine.characters.take(selStart.column).toString();
+      var endLineRest = endLine.characters.skip(selEnd.column).toString();
+      var newLine = "$startLineRest$endLineRest";
+      lines[selStart.line] = newLine;
+      if (selStart.line < selEnd.line) {
+        lines.removeRange(selStart.line + 1, selEnd.line + 1);
+        widths.removeRange(selStart.line + 1, selEnd.line + 1);
+      }
+      anchor = null;
+      cursor = selStart;
+    }
     var l = lines[cursor.line];
     var l1st = l.characters.take(cursor.column);
     var l2nd = l.characters.skip(cursor.column).take(l.characters.length - cursor.column);
@@ -60,6 +79,7 @@ class Document {
     tp.layout();
     widths[cursor.line] = tp.width;
     cursor.column += text.characters.length;
+    assert(lines.length == widths.length);
     return (Offset(tp.width, 0), cursor);
   }
 
