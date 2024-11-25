@@ -155,6 +155,14 @@ class _EditorState extends State<Editor> {
           movedCursor = true;
           doc.doc.insertText('\n');
           break;
+        case 'Backspace':
+          movedCursor = true;
+          doc.doc.deleteText(backspace: true, delete: false);
+          break;
+        case 'Delete':
+          movedCursor = true;
+          doc.doc.deleteText(backspace: false, delete: true);
+          break;
       }
       if (movedCursor) {
         adjustScrollbarsAfterCursorMovement();

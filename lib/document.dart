@@ -50,8 +50,37 @@ class Document {
     return true;
   }
 
+  void deleteText({required bool backspace, required bool delete}) {
+    // This works be selecting the text we want to delete first, if we don't already have a selection
+    if (!hasSelection()) {
+      var oldCursor = DocumentLocation(cursor.line, cursor.column);
+      if (backspace) {
+        if (cursor.column > 0) {
+          anchor = oldCursor;
+          cursor.column--;
+        } else if (cursor.column == 0 && cursor.line > 0) {
+          anchor = oldCursor;
+          var prevLineLength = lines[cursor.line - 1].characters.length;
+          var newCursor = DocumentLocation(cursor.line - 1, prevLineLength);
+          cursor = newCursor;
+        }
+      } else if (delete) {
+        var currentLength = lines[cursor.line].characters.length;
+        if (cursor.column < currentLength) {
+          anchor = oldCursor;
+          cursor.column++;
+        } else if (cursor.line < lines.length) {
+          anchor = oldCursor;
+          cursor.column = 0;
+          cursor.line++;
+        }
+      }
+    }
+    _deleteSelection();
+  }
+
   // Inserts the text at the cursor position
-  (Offset, DocumentLocation) insertText(String text) {
+  void insertText(String text) {
     if (hasSelection()) {
       _deleteSelection();
     }
@@ -77,13 +106,13 @@ class Document {
       cursor.column = 0;
       lines.insert(cursor.line, afterCursorOnFirstLine);
       widths.insert(cursor.line, 0);
-      return _insertText(newlines.last);
+      _insertText(newlines.last);
     } else {
-      return _insertText(text);
+      _insertText(text);
     }
   }
 
-  (Offset, DocumentLocation) _insertText(String text) {
+  void _insertText(String text) {
     var l = lines[cursor.line];
     var l1st = l.characters.take(cursor.column);
     var l2nd = l.characters.skip(cursor.column).take(l.characters.length - cursor.column);
@@ -93,7 +122,6 @@ class Document {
     widths[cursor.line] = tp.width;
     cursor.column += text.characters.length;
     assert(lines.length == widths.length);
-    return (Offset(tp.width, 0), cursor);
   }
 
   Size getSize() {
@@ -206,8 +234,13 @@ class Document {
       var endLine = lines[selEnd.line];
       var startLineRest = startLine.characters.take(selStart.column).toString();
       var endLineRest = endLine.characters.skip(selEnd.column).toString();
+      // The first part of the line where the selection starts (earliest in the document),
+      // and the last part of the line where the selection ends (later in the document)
       var newLine = "$startLineRest$endLineRest";
+      tp.text = TextSpan(text: newLine, style: style);
+      tp.layout();
       lines[selStart.line] = newLine;
+      widths[selStart.line] = tp.width;
       if (selStart.line < selEnd.line) {
         lines.removeRange(selStart.line + 1, selEnd.line + 1);
         widths.removeRange(selStart.line + 1, selEnd.line + 1);
