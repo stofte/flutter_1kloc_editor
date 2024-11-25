@@ -42,13 +42,13 @@ class EditorPainter extends CustomPainter {
     var renderedHeight = 0.0;
 
     for (var i = startLine; i < doc.lines.length && renderedHeight < size.height; i++) {
-      if (i == doc.cursor.line && doc.cursorImeWidth > 0) {
+      if (i == doc.cursor.line && doc.imeBufferWidth > 0) {
         var dx = offset.dx;
         var cs = doc.lines[i].characters;
         var txt1 = cs.take(doc.cursor.column).toString();
         var txt2 = cs.skip(doc.cursor.column).take(cs.length - doc.cursor.column).toString();
         paintText(txt1, offset, canvas, renderedGlyphHeight);
-        offset = Offset(offset.dx + tp.width + doc.cursorImeWidth, offset.dy);
+        offset = Offset(offset.dx + tp.width + doc.imeBufferWidth, offset.dy);
         paintText(txt2, offset, canvas, renderedGlyphHeight);
         offset = Offset(dx, offset.dy);
       } else {

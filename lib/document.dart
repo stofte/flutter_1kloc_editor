@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:math';
 
 import 'package:flutter/material.dart';
 
@@ -25,7 +24,10 @@ class Document {
   DocumentLocation anchor = DocumentLocation(0, 0);
   // When composing using IME, we have buffered input in the IME editor. It's not part of the document,
   // but we need to account for it, such as giving it space when displaying the line being edited.
-  double cursorImeWidth = 0.0;
+  double imeBufferWidth = 0;
+  // This value indicates the placement of the cursor, inside the IME editing buffer, as a columnar
+  // offset only. This assumes that the IME inpue does no wrap to multiple lines.
+  double imeCursorOffset = 0;
 
   TextDirection textDirection = TextDirection.ltr;
   TextStyle style;

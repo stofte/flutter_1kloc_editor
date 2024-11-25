@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_1kloc_editor/cursor_painter.dart';
 import 'package:flutter_1kloc_editor/document_provider.dart';
 import 'package:flutter_1kloc_editor/editor_config.dart';
 import 'package:flutter_1kloc_editor/editor_notifier.dart';
@@ -17,6 +18,7 @@ class Editor extends StatefulWidget {
 
 class _EditorState extends State<Editor> {
   final stopwatch = Stopwatch();
+  final textStopwatch = Stopwatch();
 
   final ScrollController vScroll = ScrollController();
   final ScrollController hScroll = ScrollController();
@@ -24,6 +26,7 @@ class _EditorState extends State<Editor> {
   final GlobalKey editorViewBox = GlobalKey(debugLabel: "scrollview");
   final FocusNode imeFocusNode = FocusNode();
   final FocusNode keyboardFocus = FocusNode();
+  final CursorBlinkTimer cursorBlinkTimer = CursorBlinkTimer();
   final OutlinedBorder scrollThumbShape = const RoundedRectangleBorder(
     side: BorderSide(
       color: Colors.grey,
@@ -45,6 +48,7 @@ class _EditorState extends State<Editor> {
   void initState() {
     super.initState();
     stopwatch.start();
+    textStopwatch.start();
     var textStyle = const TextStyle(
       color: Colors.black,
       fontFamily: "Consolas",
@@ -67,19 +71,31 @@ class _EditorState extends State<Editor> {
     vScrollbarNotifier.addListener(scrollListener);
     hScrollbarNotifier.addListener(scrollListener);
     textController.addListener(() {
+      textStopwatch.reset();
       var newText = textController.text;
       var newImeWidth = 10.0;
+      doc.doc.imeBufferWidth = 0;
+      doc.doc.imeCursorOffset = 0;
       if (!textController.value.isComposingRangeValid && newText.isNotEmpty) {
+        // User is not composing and we have some text. Grab it and insert into the document
         textController.text = "";
         doc.doc.insertText(newText);
-        doc.doc.cursorImeWidth = 0;
       } else {
+        // Determine the width of the full input field
         imePainter.text = TextSpan(text: newText, style: config.textStyle);
         imePainter.layout();
-        doc.doc.cursorImeWidth = imePainter.width;
+        doc.doc.imeBufferWidth = imePainter.width;
         newImeWidth = imePainter.width + 10; // TODO: Fudged cursor width?
+        if (newText.isNotEmpty) {
+          // Determine the offset the cursor is at, only if we have something.
+          var textBeforeCursor = newText.characters.take(textController.selection.baseOffset).toString();
+          imePainter.text = TextSpan(text: textBeforeCursor, style: config.textStyle);
+          imePainter.layout();
+          doc.doc.imeCursorOffset = imePainter.width;
+        }
       }
       setState(() => imeWidth = newImeWidth);
+      print("input: ${textStopwatch.elapsedMicroseconds} us");
     });
   }
 
@@ -133,7 +149,9 @@ class _EditorState extends State<Editor> {
       }
       if (movedCursor) {
         adjustScrollbarsAfterCursorMovement();
-        setState(() {});
+        setState(() {
+          cursorBlinkTimer.showNow();
+        });
       }
     }
   }
@@ -196,6 +214,13 @@ class _EditorState extends State<Editor> {
               child: CustomPaint(
                 key: editorViewBox,
                 painter: EditorPainter(config, notifier),
+                foregroundPainter: CursorPainter(
+                  config: config,
+                  doc: doc,
+                  timer: cursorBlinkTimer,
+                  hScroll: hScroll,
+                  vScroll: vScroll,
+                ),
                 child: Container(),
               ),
             ),
@@ -206,7 +231,7 @@ class _EditorState extends State<Editor> {
               width: 100,
               height: doc.doc.renderedGlyphHeight,
               child: Container(
-                color: Color(0x66FFFF00),
+                color: Colors.transparent, // Color(0x66FFFF00),
                 child: EditableText(
                   enableIMEPersonalizedLearning: false,
                   enableInteractiveSelection: false,
@@ -216,7 +241,7 @@ class _EditorState extends State<Editor> {
                   autocorrect: false,
                   style: config.textStyle,
                   scribbleEnabled: false,
-                  cursorColor: Colors.blue,
+                  cursorColor: Colors.transparent, // Colors.blue,
                   backgroundCursorColor: Colors.transparent,
                   maxLines: 1,
                 ),
