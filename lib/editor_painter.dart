@@ -20,10 +20,12 @@ class EditorPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     stopwatch.reset();
 
+    var renderedGlyphHeight = doc.renderedGlyphHeight;
     var hOffset = notifier.hOffset();
-    var vOffset = notifier.vOffset();
+    var vOffset = notifier.vOffset() / renderedGlyphHeight;
+    var startLine = vOffset.floor();
+    var startVOffset = -1 * renderedGlyphHeight * (vOffset - startLine);
 
-    var (startLine, startVOffset) = doc.getLineAndOffset(vOffset);
     var offset = Offset(config.canvasMargin - hOffset, config.canvasMargin + startVOffset);
     var renderedHeight = 0.0;
 
@@ -31,9 +33,15 @@ class EditorPainter extends CustomPainter {
       var txt = doc.lines[i];
       tp.text = TextSpan(text: txt, style: config.textStyle);
       tp.layout();
-      tp.paint(canvas, offset);
-      offset = Offset(offset.dx, offset.dy + tp.height);
-      renderedHeight += tp.height;
+      assert(tp.height <= renderedGlyphHeight);
+      if (tp.height < renderedGlyphHeight) {
+        var diff = renderedGlyphHeight - tp.height;
+        tp.paint(canvas, Offset(offset.dx, offset.dy + diff));
+      } else {
+        tp.paint(canvas, offset);
+      }
+      offset = Offset(offset.dx, offset.dy + renderedGlyphHeight);
+      renderedHeight += renderedGlyphHeight;
     }
     print("paint: ${stopwatch.elapsedMicroseconds} us");
   }
