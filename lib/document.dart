@@ -418,6 +418,8 @@ class Document {
     if (hasSelection()) {
       var selStart = getSelectionStart();
       var selEnd = getSelectionEnd();
+      var selStartByteOffset = _getByteOffsetFromDocumentLocation(selStart);
+      var selEndByteOffset = _getByteOffsetFromDocumentLocation(selEnd);
       var startLine = lines[selStart.line];
       var endLine = lines[selEnd.line];
       var startLineRest = startLine.characters.take(selStart.column).toString();
@@ -435,6 +437,17 @@ class Document {
       }
       anchor = null;
       cursor = selStart;
+      assert(treeSitter.editString(
+          selStartByteOffset,
+          selEndByteOffset,
+          selStartByteOffset,
+          selStart.line,
+          selStart.column,
+          selEnd.line,
+          selEnd.column,
+          selStart.line,
+          selStart.column,
+          _bufferReaderWrapped.nativeFunction));
     }
   }
 
@@ -521,6 +534,16 @@ class Document {
       }
     }
     return (line, byteOffset);
+  }
+
+  int _getByteOffsetFromDocumentLocation(DocumentLocation location) {
+    var line = location.line;
+    var offset = 0;
+    var i = 0;
+    for (i = 0; i < line && i < lines.length; i++) {
+      offset += lines[i].length + 1;
+    }
+    return offset + lines[i].characters.take(location.column).toString().length;
   }
 
   (int, int) _splitStringByHighlightsAndAddToList(String string, List<InlineSpan> spans, int byteOffset,
