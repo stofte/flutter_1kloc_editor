@@ -263,6 +263,10 @@ class Document {
 
   Pointer<Utf8> _bufferReaderCallback(Pointer<Void> payload, int byteOffset, TSPoint point, Pointer<Uint32> dataRead) {
     var (lineNum, colNum) = _getLineAndColumnFromByteOffset(byteOffset);
+    if (lineNum >= lines.length) {
+      dataRead.value = 0;
+      return nullptr;
+    }
     // we want to be sure we don't return a split graphmeme/character
     var line = lines[lineNum];
     var linePartFirst = line.substring(0, colNum);
