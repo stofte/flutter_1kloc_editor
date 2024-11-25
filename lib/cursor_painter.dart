@@ -30,13 +30,12 @@ class CursorPainter extends CustomPainter {
     if (timer.visible) {
       var glyphHeight = doc.doc.renderedGlyphHeight;
       var cursorHOffset = hScroll.offset - config.canvasMargin - doc.doc.imeCursorOffset;
-      // TODO: Figure out why this 1 needs to be here!
-      var cursorVOffset = vScroll.offset - config.canvasMargin - 1;
+      var cursorVOffset = vScroll.offset - config.canvasMargin;
       var cursorOffset = doc.doc.getCursorOffset();
       var scrollOffset = Offset(cursorHOffset, cursorVOffset);
       var pos = cursorOffset - scrollOffset;
       // We always show the full cursor, if any of it is visible
-      var cursorR = Rect.fromLTRB(pos.dx, pos.dy - 1, pos.dx + 2, pos.dy + glyphHeight + 1);
+      var cursorR = Rect.fromLTRB(pos.dx, pos.dy, pos.dx + 2, pos.dy + glyphHeight);
       canvas.drawRect(cursorR, cursorPaint);
     }
   }

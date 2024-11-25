@@ -16,25 +16,6 @@ class EditorPainter extends CustomPainter {
     stopwatch.start();
   }
 
-  double paintText(String text, Offset offset, Canvas canvas, double renderedGlyphHeight, bool isSelection) {
-    tp.text = TextSpan(text: text, style: config.textStyle);
-    tp.layout();
-    assert(tp.height <= renderedGlyphHeight);
-
-    if (isSelection) {
-      var rect = Rect.fromLTRB(offset.dx, offset.dy + 1, offset.dx + tp.width, offset.dy + renderedGlyphHeight + 1);
-      rect.inflate(1);
-      canvas.drawRect(rect, config.selectionPaint);
-    }
-    if (tp.height < renderedGlyphHeight) {
-      var diff = renderedGlyphHeight - tp.height;
-      tp.paint(canvas, Offset(offset.dx, offset.dy + diff));
-    } else {
-      tp.paint(canvas, offset);
-    }
-    return tp.width;
-  }
-
   @override
   void paint(Canvas canvas, Size size) {
     stopwatch.reset();
@@ -44,56 +25,62 @@ class EditorPainter extends CustomPainter {
     var vOffset = notifier.vOffset() / renderedGlyphHeight;
     var startLine = vOffset.floor();
     var startVOffset = -1 * renderedGlyphHeight * (vOffset - startLine);
-
+    var lineCount = ((size.height - config.canvasMargin) / renderedGlyphHeight).ceil();
     var offset = Offset(config.canvasMargin - hOffset, config.canvasMargin + startVOffset);
-    var renderedHeight = 0.0;
+    var textResult = doc.getText(startLine, lineCount, config.textStyle);
+    var offsetY = 0.0;
+    if (textResult.hasSelection) {
+      for (var i = 0; i < textResult.text.length; i++) {
+        var lineIdx = startLine + i;
+        if (textResult.selectionStart.line <= lineIdx && lineIdx <= textResult.selectionEnd.line) {
+          // We want to draw a box behind the selection, so we need to go
+          // into the text elements and see which ones are selected or not.
+          // We also do not care about the text after the selection ends, we do
+          // not needs it's size information.
 
-    var hasSelection = doc.hasSelection();
-    var selStart = doc.getSelectionStart();
-    var selEnd = doc.getSelectionEnd();
+          List<InlineSpan> txtBeforeSel = [];
+          List<InlineSpan> txtSel = [];
+          var foundSelection = false;
 
-    for (var i = startLine; i < doc.lines.length && renderedHeight < size.height; i++) {
-      var line = doc.lines[i];
-      var dx = offset.dx;
-      if (i == doc.cursor.line && doc.imeBufferWidth > 0) {
-        var cs = doc.lines[i].characters;
-        var txt1 = cs.take(doc.cursor.column).toString();
-        var txt2 = cs.skip(doc.cursor.column).take(cs.length - doc.cursor.column).toString();
-        var width = paintText(txt1, offset, canvas, renderedGlyphHeight, false);
-        offset = Offset(offset.dx + width + doc.imeBufferWidth, offset.dy);
-        paintText(txt2, offset, canvas, renderedGlyphHeight, false);
-        offset = Offset(dx, offset.dy);
-      } else if (hasSelection && selStart.line <= i && i <= selEnd.line) {
-        var lineSelStart = i == selStart.line ? selStart.column : 0;
-        var lineSelEnd = i == selEnd.line ? selEnd.column : line.characters.length;
-        assert(lineSelStart <= lineSelEnd);
-        var lineSegments = splitLineInto(line, lineSelStart, lineSelEnd);
-        var width = paintText(lineSegments[0], offset, canvas, renderedGlyphHeight, false);
-        offset = Offset(offset.dx + width, offset.dy);
-        width = paintText(lineSegments[1], offset, canvas, renderedGlyphHeight, true);
-        offset = Offset(offset.dx + width, offset.dy);
-        width = paintText(lineSegments[2], offset, canvas, renderedGlyphHeight, false);
-        offset = Offset(dx, offset.dy);
-      } else {
-        var txt = doc.lines[i];
-        paintText(txt, offset, canvas, renderedGlyphHeight, false);
+          for (var j = 0; j < textResult.text[i].length; j++) {
+            if (textResult.text[i][j] is TextSpanEx) {
+              var span = textResult.text[i][j] as TextSpanEx;
+              if (span.isNewline) {
+                continue;
+              }
+              if (span.isSelected) {
+                foundSelection = true;
+                txtSel.add(span);
+              } else if (!foundSelection) {
+                txtBeforeSel.add(span);
+              }
+            }
+          }
+
+          tp.text = TextSpan(children: txtBeforeSel, style: config.textStyle);
+          tp.layout();
+          var preSelectionW = tp.width;
+          tp.text = TextSpan(children: txtSel, style: config.textStyle);
+          tp.layout();
+          var selectionW = tp.width;
+          var rect = Rect.fromLTRB(offset.dx + preSelectionW, offset.dy + offsetY,
+              offset.dx + preSelectionW + selectionW, offset.dy + offsetY + renderedGlyphHeight);
+          canvas.drawRect(rect, config.selectionPaint);
+        }
+        offsetY += doc.renderedGlyphHeight;
       }
-      offset = Offset(offset.dx, offset.dy + renderedGlyphHeight);
-      renderedHeight += renderedGlyphHeight;
     }
+
+    tp.text = TextSpan(children: textResult.text.expand((x) => x).toList());
+    tp.setPlaceholderDimensions(textResult.placeholderDimensions);
+    tp.layout();
+    tp.paint(canvas, offset);
+
     print("paint: ${stopwatch.elapsedMicroseconds} us");
   }
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) {
     return true;
-  }
-
-  List<String> splitLineInto(String line, int startIndex, int endIndex) {
-    return [
-      line.characters.take(startIndex).toString(),
-      line.characters.skip(startIndex).take(endIndex - startIndex).toString(),
-      line.characters.skip(endIndex).take(line.characters.length - endIndex).toString()
-    ];
   }
 }

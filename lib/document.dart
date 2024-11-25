@@ -2,6 +2,29 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+// Customizable TextSpan which can be fed into TextPainter, but allows us to store some metadata
+class TextSpanEx extends TextSpan {
+  final bool isNewline;
+  final bool isSpacing;
+  final bool isSelected;
+  TextSpanEx(String text, TextStyle style, this.isNewline, this.isSpacing, this.isSelected)
+      : super(text: text, style: style);
+}
+
+class RenderTextResult {
+  // The text to be rendered, split into lines. If a selection is present, the text is also
+  // split at the location selection begins and ends. Each
+  final List<List<InlineSpan>> text;
+
+  final List<PlaceholderDimensions> placeholderDimensions;
+  // If we have any selection in the returned text, we indicate it here,
+  // using the selection range that was used to compute the text lists.
+  final bool hasSelection;
+  final DocumentLocation selectionStart;
+  final DocumentLocation selectionEnd;
+  RenderTextResult(this.text, this.placeholderDimensions, this.hasSelection, this.selectionStart, this.selectionEnd);
+}
+
 class DocumentLocation {
   int line;
   int column;
@@ -26,6 +49,9 @@ class Document {
 
   // This is the height of the "█" char, which should be as tall as fx smileys and kanji.
   // Regular ASCII symbols are not as tall, so this should allow a consistent line height.
+
+  // TODO: this should probably all live in the editor_painter, and not here. The document
+  // should not be concerned with it's rendered height, etc.
   late double renderedGlyphHeight;
 
   late TextPainter tp;
@@ -33,9 +59,12 @@ class Document {
 
   Document(this.style) {
     tp = TextPainter(textDirection: textDirection);
-    tp.text = TextSpan(text: '\u2288', style: style);
+    // More flutter snafu, must have at least two lines of text. There is presumably
+    // something going on between the lines which is messing with the algorithm.
+
+    tp.text = TextSpan(text: '\u2588\n\u2588', style: style);
     tp.layout();
-    renderedGlyphHeight = tp.height;
+    renderedGlyphHeight = tp.height / 2;
   }
 
   Future<bool> openFile(String path) async {
@@ -48,6 +77,54 @@ class Document {
       widths[i] = tp.width;
     }
     return true;
+  }
+
+  RenderTextResult getText(int startLine, int lineCount, TextStyle style) {
+    List<List<InlineSpan>> ls = [];
+    // We should only have one widget, for the ime buffer
+    List<PlaceholderDimensions> widgetWidths = [];
+
+    // To ensure that line heights appear consistent, we stuff each line
+    // with a dummy char, before the newline. We don't want to render this
+    // char, but it should still affect layout, so we make it transparent!
+    var invisbleStyle = style.copyWith(color: Colors.transparent);
+
+    var hasSel = hasSelection();
+    var selStart = getSelectionStart();
+    var selEnd = getSelectionEnd();
+
+    for (var i = 0; i < lineCount && (i + startLine) < lines.length; i++) {
+      ls.add([]);
+      var lineIdx = startLine + i;
+      var line = lines[lineIdx].characters;
+      if (cursor.line == startLine + i && imeBufferWidth > 0) {
+        // Line contains IME buffer
+        var firstTxt = line.take(cursor.column).toString();
+        var secondText = line.skip(cursor.column).take(line.length - cursor.column).toString();
+        ls[i].add(TextSpan(text: firstTxt, style: style));
+        // Adds placeholder for IME editor buffer, sizing is set via widgetWidths list
+        ls[i].add(WidgetSpan(child: const SizedBox(width: 0, height: 0), style: style));
+        widgetWidths.add(PlaceholderDimensions(size: Size(imeBufferWidth, 1), alignment: PlaceholderAlignment.middle));
+        ls[i].add(TextSpan(text: secondText, style: style));
+      } else if (hasSel && selStart.line <= lineIdx && lineIdx <= selEnd.line) {
+        // Line is part of selection
+        var lineSelStart = lineIdx == selStart.line ? selStart.column : 0;
+        var lineSelEnd = lineIdx == selEnd.line ? selEnd.column : line.length;
+        assert(lineSelStart <= lineSelEnd);
+        var (prefixNotSelectedSegment, selectedSegment, suffixNotSelectedSegment) =
+            _splitLineInto(line, lineSelStart, lineSelEnd);
+        // If the cursor is before the first char on a given line, only suffix will be non-empty
+        ls[i].add(TextSpanEx(prefixNotSelectedSegment, style, false, false, false));
+        ls[i].add(TextSpanEx(selectedSegment, style, false, false, true));
+        ls[i].add(TextSpanEx(suffixNotSelectedSegment, style, false, false, false));
+      } else {
+        ls[i].add(TextSpan(text: line.toString(), style: style));
+      }
+      ls[i].add(TextSpanEx("\u2588", invisbleStyle, true, false, false));
+      ls[i].add(TextSpanEx("\n", invisbleStyle, true, false, false));
+    }
+
+    return RenderTextResult(ls, widgetWidths, hasSel, selStart, selEnd);
   }
 
   void deleteText({required bool backspace, required bool delete}) {
@@ -131,6 +208,8 @@ class Document {
   }
 
   Offset getCursorOffset() {
+    assert(cursor.line >= 0);
+    assert(cursor.column >= 0);
     var l = lines[cursor.line];
     var before = l.characters.take(cursor.column).toString();
     tp.text = TextSpan(text: before, style: style);
@@ -251,6 +330,9 @@ class Document {
   }
 
   DocumentLocation _getSelectionStartOrEnd(bool start) {
+    // TODO: either make it more explicit that an instance is read-only (using final?),
+    // with private methods, or always make a copy when returing the information outside.
+    var cursor2 = DocumentLocation(cursor.line, cursor.column);
     if (anchor != null) {
       // Should never be -1, but dart does not seem clever enough here?
       var aLine = anchor?.line ?? -1;
@@ -258,12 +340,12 @@ class Document {
       var anchor2 = DocumentLocation(aLine, aCol);
       if (anchor2.line < cursor.line || anchor2.line == cursor.line && anchor2.column < cursor.column) {
         // anchor is before cursor:
-        return start ? anchor2 : cursor;
+        return start ? anchor2 : cursor2;
       } else {
-        return start ? cursor : anchor2;
+        return start ? cursor2 : anchor2;
       }
     } else {
-      return cursor;
+      return cursor2;
     }
   }
 
@@ -300,5 +382,13 @@ class Document {
         return _findCharIndexInStringFromOffset(otherHalfStr, offset - w, index + midpoint);
       }
     }
+  }
+
+  (String, String, String) _splitLineInto(Characters line, int startIndex, int endIndex) {
+    return (
+      line.take(startIndex).toString(),
+      line.skip(startIndex).take(endIndex - startIndex).toString(),
+      line.skip(endIndex).take(line.length - endIndex).toString()
+    );
   }
 }

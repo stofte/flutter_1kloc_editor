@@ -50,6 +50,7 @@ class _EditorState extends State<Editor> {
     stopwatch.start();
     textStopwatch.start();
     var textStyle = const TextStyle(
+      height: 1.3,
       color: Colors.black,
       fontFamily: "Consolas",
       fontSize: 15,
@@ -57,6 +58,7 @@ class _EditorState extends State<Editor> {
     var selectionPaint = Paint();
     selectionPaint.color = Colors.lightBlue.shade200;
     selectionPaint.style = PaintingStyle.fill;
+    selectionPaint.isAntiAlias = false;
     config = EditorConfig(textStyle, selectionPaint, 5.0);
     doc = DocumentProvider(config.textStyle);
     notifier = EditorNotifier(doc, vScroll, hScroll);
