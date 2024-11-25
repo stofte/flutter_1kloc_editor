@@ -6,11 +6,16 @@ import 'package:flutter_1kloc_editor/editor_config.dart';
 import 'package:flutter_1kloc_editor/editor_notifier.dart';
 import 'package:flutter_1kloc_editor/editor_painter.dart';
 import 'package:flutter_1kloc_editor/editor_scrollbar.dart';
+import 'package:flutter_1kloc_editor/tree_sitter.dart';
 
 class Editor extends StatefulWidget {
   final String path;
+  final TreeSitter treeSitter = TreeSitter('tslib.dll', TreeSitterEncoding.Utf8,
+      {TreeSitterLanguage.c: "scm\\c.scm", TreeSitterLanguage.javascript: "scm\\javascript.scm"});
 
-  const Editor({super.key, required this.path});
+  Editor({super.key, required this.path}) {
+    treeSitter.initialize(false);
+  }
 
   @override
   State<Editor> createState() => _EditorState();
@@ -60,7 +65,7 @@ class _EditorState extends State<Editor> {
     selectionPaint.style = PaintingStyle.fill;
     selectionPaint.isAntiAlias = false;
     config = EditorConfig(textStyle, selectionPaint, 5.0);
-    doc = DocumentProvider(config.textStyle);
+    doc = DocumentProvider(config.textStyle, this.widget.treeSitter);
     notifier = EditorNotifier(doc, vScroll, hScroll);
     FocusManager.instance.addListener(() {
       // TODO: This will likely have to change, if the editor widget is embedded in a full app

@@ -15,7 +15,7 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
       ),
-      home: Editor(path: 'smallfile.txt'),
+      home: Editor(path: 'sqlite3.txt'),
     );
   }
 }

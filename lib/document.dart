@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_1kloc_editor/tree_sitter.dart';
 
 // Customizable TextSpan which can be fed into TextPainter, but allows us to store some metadata
 class TextSpanEx extends TextSpan {
@@ -57,7 +58,9 @@ class Document {
   late TextPainter tp;
   late String path;
 
-  Document(this.style) {
+  final TreeSitter treeSitter;
+
+  Document(this.style, this.treeSitter) {
     tp = TextPainter(textDirection: textDirection);
     // More flutter snafu, must have at least two lines of text. There is presumably
     // something going on between the lines which is messing with the algorithm.
@@ -68,6 +71,7 @@ class Document {
   }
 
   Future<bool> openFile(String path) async {
+    treeSitter.setLanguage(TreeSitterLanguage.c);
     this.path = path;
     lines = await File(this.path).readAsLines();
     widths = List.filled(lines.length, 0, growable: true);
@@ -76,6 +80,7 @@ class Document {
       tp.layout();
       widths[i] = tp.width;
     }
+    treeSitter.parseString(lines.join('\n'));
     return true;
   }
 
@@ -83,6 +88,9 @@ class Document {
     List<List<InlineSpan>> ls = [];
     // We should only have one widget, for the ime buffer
     List<PlaceholderDimensions> widgetWidths = [];
+
+    var startLineByteOffset = _getLineByteOffset(startLine);
+    var endLineByteOffset = _getLineByteOffset(startLine + lineCount);
 
     // To ensure that line heights appear consistent, we stuff each line
     // with a dummy char, before the newline. We don't want to render this
@@ -93,7 +101,13 @@ class Document {
     var selStart = getSelectionStart();
     var selEnd = getSelectionEnd();
 
+    var hlInfo = treeSitter.getHighlights(startLineByteOffset, endLineByteOffset - startLineByteOffset);
+    var relByteOffset = 0;
+    var hlIdx = 0;
+
     for (var i = 0; i < lineCount && (i + startLine) < lines.length; i++) {
+      var relByteOffsetLoopStart = relByteOffset;
+      List<InlineSpan> newlist = [];
       ls.add([]);
       var lineIdx = startLine + i;
       var line = lines[lineIdx].characters;
@@ -101,11 +115,14 @@ class Document {
         // Line contains IME buffer
         var firstTxt = line.take(cursor.column).toString();
         var secondText = line.skip(cursor.column).take(line.length - cursor.column).toString();
-        ls[i].add(TextSpan(text: firstTxt, style: style));
+        (relByteOffset, hlIdx) =
+            _splitStringByHighlightsAndAddToList(firstTxt, newlist, relByteOffset, hlInfo, hlIdx, style, false);
+        // newlist.add(TextSpan(text: firstTxt, style: style));
         // Adds placeholder for IME editor buffer, sizing is set via widgetWidths list
-        ls[i].add(WidgetSpan(child: const SizedBox(width: 0, height: 0), style: style));
+        newlist.add(WidgetSpan(child: const SizedBox(width: 0, height: 0), style: style));
         widgetWidths.add(PlaceholderDimensions(size: Size(imeBufferWidth, 1), alignment: PlaceholderAlignment.middle));
-        ls[i].add(TextSpan(text: secondText, style: style));
+        (relByteOffset, hlIdx) =
+            _splitStringByHighlightsAndAddToList(secondText, newlist, relByteOffset, hlInfo, hlIdx, style, false);
       } else if (hasSel && selStart.line <= lineIdx && lineIdx <= selEnd.line) {
         // Line is part of selection
         var lineSelStart = lineIdx == selStart.line ? selStart.column : 0;
@@ -114,14 +131,20 @@ class Document {
         var (prefixNotSelectedSegment, selectedSegment, suffixNotSelectedSegment) =
             _splitLineInto(line, lineSelStart, lineSelEnd);
         // If the cursor is before the first char on a given line, only suffix will be non-empty
-        ls[i].add(TextSpanEx(prefixNotSelectedSegment, style, false, false, false));
-        ls[i].add(TextSpanEx(selectedSegment, style, false, false, true));
-        ls[i].add(TextSpanEx(suffixNotSelectedSegment, style, false, false, false));
+        (relByteOffset, hlIdx) = _splitStringByHighlightsAndAddToList(
+            prefixNotSelectedSegment, newlist, relByteOffset, hlInfo, hlIdx, style, false);
+        (relByteOffset, hlIdx) =
+            _splitStringByHighlightsAndAddToList(selectedSegment, newlist, relByteOffset, hlInfo, hlIdx, style, true);
+        (relByteOffset, hlIdx) = _splitStringByHighlightsAndAddToList(
+            suffixNotSelectedSegment, newlist, relByteOffset, hlInfo, hlIdx, style, false);
       } else {
-        ls[i].add(TextSpan(text: line.toString(), style: style));
+        (relByteOffset, hlIdx) =
+            _splitStringByHighlightsAndAddToList(line.toString(), newlist, relByteOffset, hlInfo, hlIdx, style, false);
       }
-      ls[i].add(TextSpanEx("\u2588", invisbleStyle, true, false, false));
-      ls[i].add(TextSpanEx("\n", invisbleStyle, true, false, false));
+      newlist.add(TextSpanEx("\u2588", invisbleStyle, false, true, false));
+      newlist.add(TextSpanEx("\n", invisbleStyle, true, false, false));
+      ls[i] = newlist;
+      assert(relByteOffsetLoopStart + line.length == relByteOffset);
     }
 
     return RenderTextResult(ls, widgetWidths, hasSel, selStart, selEnd);
@@ -390,5 +413,37 @@ class Document {
       line.skip(startIndex).take(endIndex - startIndex).toString(),
       line.skip(endIndex).take(line.length - endIndex).toString()
     );
+  }
+
+  int _getLineByteOffset(int line) {
+    var offset = 0;
+    for (var i = 0; i < line && i < lines.length; i++) {
+      offset += lines[i].length;
+    }
+    return offset;
+  }
+
+  (int, int) _splitStringByHighlightsAndAddToList(String string, List<InlineSpan> spans, int lineByteOffset,
+      List<HighlightInfo> hlInfo, int hlIdx, TextStyle defaultText, bool isSelected) {
+    // var remaining = string;
+    // var offset = lineByteOffset;
+    // while (remaining.isNotEmpty && hlInfo.isNotEmpty) {
+    //   // While we have more string to match against, and we still have HL info items
+    //   var hl = hlInfo.first;
+    //   if (hl.start > offset) {
+    //     var snip = remaining.substring(0, hl.start - offset);
+    //     remaining = remaining.substring(snip.length);
+    //     spans.add(TextSpanEx(snip, style, false, false, isSelected));
+    //   }
+    //   var snip = remaining.substring(0, hl.length);
+    //   spans.add(TextSpanEx(snip, style, false, false, isSelected));
+    //   remaining = remaining.substring(snip.length);
+    // }
+    // // split text using info in hlInfo
+    spans.add(TextSpanEx(string, style, false, false, isSelected));
+    // Returns the new byte offset after processing the segment, and as also return the index from
+    // which we can begin in hlInfo, next time, skipping previously used entries.
+
+    return (lineByteOffset + string.length, hlIdx);
   }
 }

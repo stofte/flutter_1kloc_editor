@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_1kloc_editor/document.dart';
+import 'package:flutter_1kloc_editor/tree_sitter.dart';
 
 class DocumentProvider extends ChangeNotifier {
   TextStyle textStyle;
   late Document doc;
 
-  DocumentProvider(this.textStyle) {
-    doc = Document(textStyle);
+  DocumentProvider(this.textStyle, TreeSitter treeSitter) {
+    doc = Document(textStyle, treeSitter);
   }
 
   Future<bool> openFile(String path) async {
