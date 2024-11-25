@@ -99,6 +99,8 @@ class Document {
   }
 
   bool moveCursorLeft() {
+    var anchorWasNotNull = anchor != null;
+    anchor = null;
     if (cursor.column == 0 && cursor.line > 0) {
       cursor.line--;
       cursor.column = lines[cursor.line].characters.length;
@@ -107,10 +109,13 @@ class Document {
       cursor.column--;
       return true;
     }
-    return false;
+    // If the anchor was cleared, we return true as well
+    return anchorWasNotNull;
   }
 
   bool moveCursorRight() {
+    var anchorWasNotNull = anchor != null;
+    anchor = null;
     var thisLineLength = lines[cursor.line].characters.length;
     if (cursor.column == thisLineLength && cursor.line < lines.length - 1) {
       cursor.line++;
@@ -120,10 +125,12 @@ class Document {
       cursor.column++;
       return true;
     }
-    return false;
+    return anchorWasNotNull;
   }
 
   bool moveCursorUp() {
+    var anchorWasNotNull = anchor != null;
+    anchor = null;
     if (cursor.line > 0) {
       // We try to find the closest match to the current visual column offset in the line up.
       var colOffset = _currentColOffset();
@@ -131,17 +138,19 @@ class Document {
       cursor.column = _findCharIndexInStringFromOffset(lines[cursor.line], colOffset, 0);
       return true;
     }
-    return false;
+    return anchorWasNotNull;
   }
 
   bool moveCursorDown() {
+    var anchorWasNotNull = anchor != null;
+    anchor = null;
     if (cursor.line < lines.length - 1) {
       var colOffset = _currentColOffset();
       cursor.line++;
       cursor.column = _findCharIndexInStringFromOffset(lines[cursor.line], colOffset, 0);
       return true;
     }
-    return false;
+    return anchorWasNotNull;
   }
 
   bool hasSelection() {
