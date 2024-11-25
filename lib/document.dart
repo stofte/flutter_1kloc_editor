@@ -125,8 +125,9 @@ class Document {
 
   bool moveCursorUp() {
     if (cursor.line > 0) {
+      var colOffset = _currentColOffset();
       cursor.line--;
-      cursor.column = min(cursor.column, lines[cursor.line].characters.length);
+      cursor.column = _findCharIndexInStringFromOffset(lines[cursor.line], colOffset, 0);
       return true;
     }
     return false;
@@ -134,11 +135,19 @@ class Document {
 
   bool moveCursorDown() {
     if (cursor.line < lines.length - 1) {
+      var colOffset = _currentColOffset();
       cursor.line++;
-      cursor.column = min(cursor.column, lines[cursor.line].characters.length);
+      cursor.column = _findCharIndexInStringFromOffset(lines[cursor.line], colOffset, 0);
       return true;
     }
     return false;
+  }
+
+  double _currentColOffset() {
+    var l = lines[cursor.line];
+    tp.text = TextSpan(text: l.characters.take(cursor.column).toString(), style: style);
+    tp.layout();
+    return tp.width;
   }
 
   int _findCharIndexInStringFromOffset(String text, double offset, int index) {

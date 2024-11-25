@@ -21,11 +21,7 @@ class _EditorState extends State<Editor> {
   final ScrollController vScroll = ScrollController();
   final ScrollController hScroll = ScrollController();
   final TextEditingController textController = TextEditingController();
-  late DocumentProvider doc;
-  late EditorNotifier notifier;
-  late EditorConfig config;
-  late EditorScrollbarEvent vScrollbarNotifier;
-  late EditorScrollbarEvent hScrollbarNotifier;
+  final GlobalKey editorViewBox = GlobalKey(debugLabel: "scrollview");
   final FocusNode imeFocusNode = FocusNode();
   final FocusNode keyboardFocus = FocusNode();
   final OutlinedBorder scrollThumbShape = const RoundedRectangleBorder(
@@ -33,6 +29,12 @@ class _EditorState extends State<Editor> {
       color: Colors.grey,
     ),
   );
+
+  late DocumentProvider doc;
+  late EditorNotifier notifier;
+  late EditorConfig config;
+  late EditorScrollbarEvent vScrollbarNotifier = EditorScrollbarEvent("vert");
+  late EditorScrollbarEvent hScrollbarNotifier = EditorScrollbarEvent("horz");
 
   TextPainter imePainter = TextPainter(textDirection: TextDirection.ltr);
   double imeWidth = 10;
@@ -51,8 +53,6 @@ class _EditorState extends State<Editor> {
     config = EditorConfig(textStyle, 5.0);
     doc = DocumentProvider(config.textStyle);
     notifier = EditorNotifier(doc, vScroll, hScroll);
-    vScrollbarNotifier = EditorScrollbarEvent("vert");
-    hScrollbarNotifier = EditorScrollbarEvent("horz");
 
     // setState triggers new build call when eg size of document changes
     doc.addListener(() => setState(() {}));
@@ -104,6 +104,27 @@ class _EditorState extends State<Editor> {
     isMouseDown = false;
   }
 
+  void adjustScrollbarsAfterCursorMovement() {
+    var scrollViewBox = editorViewBox.currentContext!.findRenderObject() as RenderBox;
+    var svHeight = scrollViewBox.size.height;
+    var svWidth = scrollViewBox.size.width;
+    var cursorOffset = doc.doc.getCursorOffset();
+    var offset = Offset(cursorOffset.dx - hScroll.offset, cursorOffset.dy - vScroll.offset) +
+        Offset(config.canvasMargin, config.canvasMargin);
+
+    if (offset.dx < 0) {
+      hScroll.jumpTo(hScroll.offset + offset.dx);
+    } else if (offset.dx > svWidth) {
+      hScroll.jumpTo(hScroll.offset + (offset.dx - svWidth));
+    }
+
+    if (offset.dy < 0) {
+      vScroll.jumpTo(vScroll.offset + offset.dy);
+    } else if (offset.dy > svHeight - doc.doc.renderedGlyphHeight) {
+      vScroll.jumpTo(vScroll.offset + (offset.dy - (svHeight - doc.doc.renderedGlyphHeight)));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     stopwatch.reset();
@@ -145,6 +166,7 @@ class _EditorState extends State<Editor> {
               break;
           }
           if (movedCursor) {
+            adjustScrollbarsAfterCursorMovement();
             setState(() {});
           }
         }
@@ -162,6 +184,7 @@ class _EditorState extends State<Editor> {
                 maxWidth: winSize.width,
               ),
               child: CustomPaint(
+                key: editorViewBox,
                 painter: EditorPainter(config, notifier),
                 child: Container(),
               ),
