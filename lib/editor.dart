@@ -61,10 +61,12 @@ class _EditorState extends State<Editor> {
     });
   }
 
+  Offset mapFromPointer(Offset p) =>
+      Offset(p.dx - config.canvasMargin + hScroll.offset, p.dy - config.canvasMargin + vScroll.offset);
+
   void onPointerDown(PointerDownEvent event) {
-    var p = event.localPosition;
-    var offset = Offset(p.dx - config.canvasMargin, p.dy - config.canvasMargin);
-    if (doc.doc.setCursorFromOffset(offset, vScroll.offset, hScroll.offset)) {
+    var offset = mapFromPointer(event.localPosition);
+    if (doc.doc.setCursorFromOffset(offset)) {
       doc.touch();
     }
     isMouseDown = true;
@@ -72,16 +74,14 @@ class _EditorState extends State<Editor> {
 
   void onPointerMove(PointerMoveEvent event) {
     if (isMouseDown) {
-      var p = event.localPosition;
-      var offset = Offset(p.dx - config.canvasMargin, p.dy - config.canvasMargin);
-      if (doc.doc.setCursorFromOffset(offset, vScroll.offset, hScroll.offset)) {
+      var offset = mapFromPointer(event.localPosition);
+      if (doc.doc.setCursorFromOffset(offset)) {
         doc.touch();
       }
     }
   }
 
   void onPointerUp(PointerUpEvent event) {
-    var p = event.localPosition;
     isMouseDown = false;
   }
 
@@ -96,7 +96,14 @@ class _EditorState extends State<Editor> {
     }
 
     var winSize = MediaQuery.of(context).size;
-    var cursorOffset = doc.doc.getCursorOffset();
+    var cursorOffsetAbs = doc.doc.getCursorOffset();
+    var vScrollOffset = vScroll.hasClients ? vScroll.offset : 0;
+    var hScrollOffset = hScroll.hasClients ? hScroll.offset : 0;
+    // We map from the document's "absolute" coordinates and adjust for the scrollbar offsets.
+    // TODO: 2 Is the diff between regular ascii lines and max height lines, but why?!
+    var cursorOffset = Offset(cursorOffsetAbs.dx + config.canvasMargin - hScrollOffset,
+        cursorOffsetAbs.dy + config.canvasMargin + 2 - vScrollOffset);
+
     var codeSize = doc.doc.getSize();
     codeSize = Size(codeSize.width + (config.canvasMargin * 2), codeSize.height + (config.canvasMargin * 2));
     var ui = Listener(
@@ -141,9 +148,8 @@ class _EditorState extends State<Editor> {
             ),
           ),
           Positioned(
-            left: config.canvasMargin + cursorOffset.dx,
-            // TODO: 2 Is the diff between regular ascii lines and max height lines, but why?!
-            top: config.canvasMargin + cursorOffset.dy + 2,
+            left: cursorOffset.dx,
+            top: cursorOffset.dy,
             // TODO: Width needs to be computed from the contents of the field ...
             width: 100,
             height: doc.doc.renderedGlyphHeight,

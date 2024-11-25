@@ -79,9 +79,9 @@ class Document {
     return Offset(tp.width, cursor.line * renderedGlyphHeight);
   }
 
-  bool setCursorFromOffset(Offset offset, double vScrollOffset, double hScrollOffset) {
+  bool setCursorFromOffset(Offset offset) {
     // Assumes that the offset has been adjusted for canvas margins, etc
-    var lineNum = ((vScrollOffset + offset.dy) / renderedGlyphHeight).floor();
+    var lineNum = (offset.dy / renderedGlyphHeight).floor();
     if (lineNum < 0) {
       lineNum = 0;
     } else if (lineNum >= lines.length) {
