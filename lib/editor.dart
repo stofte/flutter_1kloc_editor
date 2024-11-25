@@ -3,11 +3,12 @@ import 'package:flutter_1kloc_editor/document_provider.dart';
 import 'package:flutter_1kloc_editor/editor_config.dart';
 import 'package:flutter_1kloc_editor/editor_notifier.dart';
 import 'package:flutter_1kloc_editor/editor_painter.dart';
+import 'package:flutter_1kloc_editor/editor_scrollbar.dart';
 
 class Editor extends StatefulWidget {
   final String path;
 
-  Editor({super.key, required this.path});
+  const Editor({super.key, required this.path});
 
   @override
   State<Editor> createState() => _EditorState();
@@ -22,11 +23,19 @@ class _EditorState extends State<Editor> {
   late DocumentProvider doc;
   late EditorNotifier notifier;
   late EditorConfig config;
+  late EditorScrollbarEvent vScrollbarNotifier;
+  late EditorScrollbarEvent hScrollbarNotifier;
   final FocusNode imeFocusNode = FocusNode();
+  final OutlinedBorder scrollThumbShape = const RoundedRectangleBorder(
+    side: BorderSide(
+      color: Colors.grey,
+    ),
+  );
   bool isMouseDown = false;
 
   TextPainter imePainter = TextPainter(textDirection: TextDirection.ltr);
   double imeWidth = 10;
+  bool isScrollbarHovered = false;
 
   @override
   void initState() {
@@ -40,9 +49,18 @@ class _EditorState extends State<Editor> {
     config = EditorConfig(textStyle, 5.0);
     doc = DocumentProvider(config.textStyle);
     notifier = EditorNotifier(doc, vScroll, hScroll);
+    vScrollbarNotifier = EditorScrollbarEvent("vert");
+    hScrollbarNotifier = EditorScrollbarEvent("horz");
+
     // Triggers new build call when eg size of document changes
     doc.addListener(() => setState(() {}));
     doc.openFile(widget.path);
+    vScrollbarNotifier.addListener(() {
+      isScrollbarHovered = vScrollbarNotifier.hovered || hScrollbarNotifier.hovered;
+    });
+    hScrollbarNotifier.addListener(() {
+      isScrollbarHovered = vScrollbarNotifier.hovered || hScrollbarNotifier.hovered;
+    });
     textController.addListener(() {
       var newText = textController.text;
       if (!textController.value.isComposingRangeValid && newText.isNotEmpty) {
@@ -67,6 +85,9 @@ class _EditorState extends State<Editor> {
       Offset(p.dx - config.canvasMargin + hScroll.offset, p.dy - config.canvasMargin + vScroll.offset);
 
   void onPointerDown(PointerDownEvent event) {
+    if (isScrollbarHovered) {
+      return;
+    }
     var offset = mapFromPointer(event.localPosition);
     if (doc.doc.setCursorFromOffset(offset)) {
       doc.touch();
@@ -128,21 +149,38 @@ class _EditorState extends State<Editor> {
           SizedBox(
             height: winSize.height,
             width: winSize.width,
-            child: Scrollbar(
+            child: EditorScrollbar(
+              thickness: 15,
+              minThumbLength: 30,
+              trackBorderColor: Colors.transparent,
+              thumbVisibility: true,
+              trackVisibility: true,
+              shape: scrollThumbShape,
+              notifier: vScrollbarNotifier,
               controller: vScroll,
-              child: Scrollbar(
+              child: EditorScrollbar(
+                thickness: 15,
+                minThumbLength: 30,
+                trackBorderColor: Colors.transparent,
+                thumbVisibility: true,
+                trackVisibility: true,
+                shape: scrollThumbShape,
+                notifier: hScrollbarNotifier,
                 controller: hScroll,
                 notificationPredicate: (notif) => notif.depth == 1,
-                child: SingleChildScrollView(
-                  controller: vScroll,
-                  scrollDirection: Axis.vertical,
+                child: ScrollConfiguration(
+                  behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
                   child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    controller: hScroll,
-                    child: SizedBox(
-                      height: codeSize.height,
-                      width: codeSize.width,
-                      child: Container(),
+                    controller: vScroll,
+                    scrollDirection: Axis.vertical,
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      controller: hScroll,
+                      child: SizedBox(
+                        height: codeSize.height,
+                        width: codeSize.width,
+                        child: Container(),
+                      ),
                     ),
                   ),
                 ),
