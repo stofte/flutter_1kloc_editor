@@ -31,11 +31,11 @@ class _EditorState extends State<Editor> {
       color: Colors.grey,
     ),
   );
-  bool isMouseDown = false;
 
   TextPainter imePainter = TextPainter(textDirection: TextDirection.ltr);
   double imeWidth = 10;
   bool isScrollbarHovered = false;
+  bool isMouseDown = false;
 
   @override
   void initState() {
@@ -52,35 +52,29 @@ class _EditorState extends State<Editor> {
     vScrollbarNotifier = EditorScrollbarEvent("vert");
     hScrollbarNotifier = EditorScrollbarEvent("horz");
 
-    // Triggers new build call when eg size of document changes
+    // setState triggers new build call when eg size of document changes
     doc.addListener(() => setState(() {}));
     doc.openFile(widget.path);
-    vScrollbarNotifier.addListener(() {
-      isScrollbarHovered = vScrollbarNotifier.hovered || hScrollbarNotifier.hovered;
-    });
-    hScrollbarNotifier.addListener(() {
-      isScrollbarHovered = vScrollbarNotifier.hovered || hScrollbarNotifier.hovered;
-    });
+    vScrollbarNotifier.addListener(scrollListener);
+    hScrollbarNotifier.addListener(scrollListener);
     textController.addListener(() {
       var newText = textController.text;
+      var newImeWidth = 10.0;
       if (!textController.value.isComposingRangeValid && newText.isNotEmpty) {
         textController.text = "";
         doc.doc.insertText(newText);
         doc.doc.cursorImeWidth = 0;
-        setState(() {
-          imeWidth = 10;
-        });
       } else {
         imePainter.text = TextSpan(text: newText, style: config.textStyle);
         imePainter.layout();
         doc.doc.cursorImeWidth = imePainter.width;
-        setState(() {
-          imeWidth = imePainter.width + 10; // TODO: Fudged cursor width?
-        });
+        newImeWidth = imePainter.width + 10; // TODO: Fudged cursor width?
       }
+      setState(() => imeWidth = newImeWidth);
     });
   }
 
+  void scrollListener() => isScrollbarHovered = vScrollbarNotifier.hovered || hScrollbarNotifier.hovered;
   Offset mapFromPointer(Offset p) =>
       Offset(p.dx - config.canvasMargin + hScroll.offset, p.dy - config.canvasMargin + vScroll.offset);
 
@@ -169,6 +163,7 @@ class _EditorState extends State<Editor> {
                 controller: hScroll,
                 notificationPredicate: (notif) => notif.depth == 1,
                 child: ScrollConfiguration(
+                  // Seems required if a duplicate scrollbar is not desired?
                   behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
                   child: SingleChildScrollView(
                     controller: vScroll,
