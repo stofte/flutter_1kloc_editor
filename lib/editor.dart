@@ -151,6 +151,10 @@ class _EditorState extends State<Editor> {
         case 'Arrow Down':
           movedCursor = doc.doc.moveCursorDown();
           break;
+        case 'Enter':
+          movedCursor = true;
+          doc.doc.insertText('\n');
+          break;
       }
       if (movedCursor) {
         adjustScrollbarsAfterCursorMovement();

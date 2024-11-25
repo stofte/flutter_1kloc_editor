@@ -53,24 +53,37 @@ class Document {
   // Inserts the text at the cursor position
   (Offset, DocumentLocation) insertText(String text) {
     if (hasSelection()) {
-      // Replace the selection with the inserted text, by first deleting the entire selection,
-      // move the cursor to the start of the selection (earliest in the document), and then
-      // do the standard insert text treatment.
-      var selStart = getSelectionStart();
-      var selEnd = getSelectionEnd();
-      var startLine = lines[selStart.line];
-      var endLine = lines[selEnd.line];
-      var startLineRest = startLine.characters.take(selStart.column).toString();
-      var endLineRest = endLine.characters.skip(selEnd.column).toString();
-      var newLine = "$startLineRest$endLineRest";
-      lines[selStart.line] = newLine;
-      if (selStart.line < selEnd.line) {
-        lines.removeRange(selStart.line + 1, selEnd.line + 1);
-        widths.removeRange(selStart.line + 1, selEnd.line + 1);
-      }
-      anchor = null;
-      cursor = selStart;
+      _deleteSelection();
     }
+    // TODO: Need to handle \r\n newlines as well
+    // Splitting the string '\n' by '\n' yields two empty strings.
+    if (text.contains('\n')) {
+      // Save contents after the cursor to EOL
+      var afterCursorOnFirstLine = lines[cursor.line].characters.skip(cursor.column).toString();
+      // Sets the current line to be without the just saved contents
+      lines[cursor.line] = lines[cursor.line].characters.take(cursor.column).toString();
+      // Splitting '\n' yields two empty strings (the empty string before and after the '\n')
+      var newlines = text.split('\n');
+      _insertText(newlines[0]); // insert whatever is before the first newline
+
+      for (var i = 1; i < newlines.length - 1; i++) {
+        cursor.line++; // move the cursor down
+        lines.insert(cursor.line, newlines[i]);
+        tp.text = TextSpan(text: newlines[i], style: style);
+        tp.layout();
+        widths.insert(cursor.line, tp.width);
+      }
+      cursor.line++;
+      cursor.column = 0;
+      lines.insert(cursor.line, afterCursorOnFirstLine);
+      widths.insert(cursor.line, 0);
+      return _insertText(newlines.last);
+    } else {
+      return _insertText(text);
+    }
+  }
+
+  (Offset, DocumentLocation) _insertText(String text) {
     var l = lines[cursor.line];
     var l1st = l.characters.take(cursor.column);
     var l2nd = l.characters.skip(cursor.column).take(l.characters.length - cursor.column);
@@ -183,6 +196,25 @@ class Document {
 
   DocumentLocation getSelectionEnd() {
     return _getSelectionStartOrEnd(false);
+  }
+
+  void _deleteSelection() {
+    if (hasSelection()) {
+      var selStart = getSelectionStart();
+      var selEnd = getSelectionEnd();
+      var startLine = lines[selStart.line];
+      var endLine = lines[selEnd.line];
+      var startLineRest = startLine.characters.take(selStart.column).toString();
+      var endLineRest = endLine.characters.skip(selEnd.column).toString();
+      var newLine = "$startLineRest$endLineRest";
+      lines[selStart.line] = newLine;
+      if (selStart.line < selEnd.line) {
+        lines.removeRange(selStart.line + 1, selEnd.line + 1);
+        widths.removeRange(selStart.line + 1, selEnd.line + 1);
+      }
+      anchor = null;
+      cursor = selStart;
+    }
   }
 
   DocumentLocation _getSelectionStartOrEnd(bool start) {
