@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_1kloc_editor/document_provider.dart';
 import 'package:flutter_1kloc_editor/editor_config.dart';
 import 'package:flutter_1kloc_editor/editor_notifier.dart';
@@ -26,6 +27,7 @@ class _EditorState extends State<Editor> {
   late EditorScrollbarEvent vScrollbarNotifier;
   late EditorScrollbarEvent hScrollbarNotifier;
   final FocusNode imeFocusNode = FocusNode();
+  final FocusNode keyboardFocus = FocusNode();
   final OutlinedBorder scrollThumbShape = const RoundedRectangleBorder(
     side: BorderSide(
       color: Colors.grey,
@@ -123,58 +125,73 @@ class _EditorState extends State<Editor> {
 
     var codeSize = doc.doc.getSize();
     codeSize = Size(codeSize.width + (config.canvasMargin * 2), codeSize.height + (config.canvasMargin * 2));
-    var ui = Listener(
-      onPointerDown: onPointerDown,
-      onPointerMove: onPointerMove,
-      onPointerUp: onPointerUp,
-      child: Stack(
-        children: [
-          Container(
-            color: Colors.white,
-            constraints: BoxConstraints(
-              maxHeight: winSize.height,
-              maxWidth: winSize.width,
-            ),
-            child: CustomPaint(
-              painter: EditorPainter(config, notifier),
-              child: Container(),
-            ),
-          ),
-          Positioned(
-            left: cursorOffset.dx,
-            top: cursorOffset.dy,
-            // TODO: Width needs to be computed from the contents of the field ...
-            width: 100,
-            height: doc.doc.renderedGlyphHeight,
-            child: Container(
-              color: Color(0x66FFFF00),
-              child: EditableText(
-                enableIMEPersonalizedLearning: false,
-                enableInteractiveSelection: false,
-                controller: textController,
-                focusNode: imeFocusNode,
-                autofocus: true,
-                autocorrect: false,
-                style: config.textStyle,
-                scribbleEnabled: false,
-                cursorColor: Colors.blue,
-                backgroundCursorColor: Colors.transparent,
-                maxLines: 1,
+    var ui = KeyboardListener(
+      focusNode: keyboardFocus,
+      onKeyEvent: (event) {
+        if (event.runtimeType == KeyDownEvent || event.runtimeType == KeyRepeatEvent) {
+          var movedCursor = false;
+          switch (event.logicalKey.keyLabel) {
+            case 'Arrow Left':
+              movedCursor = doc.doc.moveCursorLeft();
+              break;
+            case 'Arrow Right':
+              movedCursor = doc.doc.moveCursorRight();
+              break;
+            case 'Arrow Up':
+              movedCursor = doc.doc.moveCursorUp();
+              break;
+            case 'Arrow Down':
+              movedCursor = doc.doc.moveCursorDown();
+              break;
+          }
+          if (movedCursor) {
+            setState(() {});
+          }
+        }
+      },
+      child: Listener(
+        onPointerDown: onPointerDown,
+        onPointerMove: onPointerMove,
+        onPointerUp: onPointerUp,
+        child: Stack(
+          children: [
+            Container(
+              color: Colors.white,
+              constraints: BoxConstraints(
+                maxHeight: winSize.height,
+                maxWidth: winSize.width,
+              ),
+              child: CustomPaint(
+                painter: EditorPainter(config, notifier),
+                child: Container(),
               ),
             ),
-          ),
-          SizedBox(
-            height: winSize.height,
-            width: winSize.width,
-            child: EditorScrollbar(
-              thickness: 15,
-              minThumbLength: 30,
-              trackBorderColor: Colors.transparent,
-              thumbVisibility: false,
-              trackVisibility: false,
-              shape: scrollThumbShape,
-              notifier: vScrollbarNotifier,
-              controller: vScroll,
+            Positioned(
+              left: cursorOffset.dx,
+              top: cursorOffset.dy,
+              // TODO: Width needs to be computed from the contents of the field ...
+              width: 100,
+              height: doc.doc.renderedGlyphHeight,
+              child: Container(
+                color: Color(0x66FFFF00),
+                child: EditableText(
+                  enableIMEPersonalizedLearning: false,
+                  enableInteractiveSelection: false,
+                  controller: textController,
+                  focusNode: imeFocusNode,
+                  autofocus: true,
+                  autocorrect: false,
+                  style: config.textStyle,
+                  scribbleEnabled: false,
+                  cursorColor: Colors.blue,
+                  backgroundCursorColor: Colors.transparent,
+                  maxLines: 1,
+                ),
+              ),
+            ),
+            SizedBox(
+              height: winSize.height,
+              width: winSize.width,
               child: EditorScrollbar(
                 thickness: 15,
                 minThumbLength: 30,
@@ -182,30 +199,40 @@ class _EditorState extends State<Editor> {
                 thumbVisibility: false,
                 trackVisibility: false,
                 shape: scrollThumbShape,
-                notifier: hScrollbarNotifier,
-                controller: hScroll,
-                notificationPredicate: (notif) => notif.depth == 1,
-                child: ScrollConfiguration(
-                  // Seems required if a duplicate scrollbar is not desired?
-                  behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
-                  child: SingleChildScrollView(
-                    controller: vScroll,
-                    scrollDirection: Axis.vertical,
+                notifier: vScrollbarNotifier,
+                controller: vScroll,
+                child: EditorScrollbar(
+                  thickness: 15,
+                  minThumbLength: 30,
+                  trackBorderColor: Colors.transparent,
+                  thumbVisibility: false,
+                  trackVisibility: false,
+                  shape: scrollThumbShape,
+                  notifier: hScrollbarNotifier,
+                  controller: hScroll,
+                  notificationPredicate: (notif) => notif.depth == 1,
+                  child: ScrollConfiguration(
+                    // Seems required if a duplicate scrollbar is not desired?
+                    behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
                     child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      controller: hScroll,
-                      child: SizedBox(
-                        height: codeSize.height,
-                        width: codeSize.width,
-                        child: Container(),
+                      controller: vScroll,
+                      scrollDirection: Axis.vertical,
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        controller: hScroll,
+                        child: SizedBox(
+                          height: codeSize.height,
+                          width: codeSize.width,
+                          child: Container(),
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
     print("build: ${stopwatch.elapsedMicroseconds} us");

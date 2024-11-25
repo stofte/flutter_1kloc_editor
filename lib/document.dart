@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 
@@ -95,6 +96,49 @@ class Document {
     var changed = cursor != newCursor;
     cursor = newCursor;
     return changed;
+  }
+
+  bool moveCursorLeft() {
+    if (cursor.column == 0 && cursor.line > 0) {
+      cursor.line--;
+      cursor.column = lines[cursor.line].characters.length;
+      return true;
+    } else if (cursor.column > 0) {
+      cursor.column--;
+      return true;
+    }
+    return false;
+  }
+
+  bool moveCursorRight() {
+    var thisLineLength = lines[cursor.line].characters.length;
+    if (cursor.column == thisLineLength && cursor.line < lines.length - 1) {
+      cursor.line++;
+      cursor.column = 0;
+      return true;
+    } else if (cursor.column < thisLineLength) {
+      cursor.column++;
+      return true;
+    }
+    return false;
+  }
+
+  bool moveCursorUp() {
+    if (cursor.line > 0) {
+      cursor.line--;
+      cursor.column = min(cursor.column, lines[cursor.line].characters.length);
+      return true;
+    }
+    return false;
+  }
+
+  bool moveCursorDown() {
+    if (cursor.line < lines.length - 1) {
+      cursor.line++;
+      cursor.column = min(cursor.column, lines[cursor.line].characters.length);
+      return true;
+    }
+    return false;
   }
 
   int _findCharIndexInStringFromOffset(String text, double offset, int index) {
