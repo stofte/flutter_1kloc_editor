@@ -42,7 +42,7 @@ class CursorPainter extends CustomPainter {
   }
 }
 
-class CursorBlinkTimer with ChangeNotifier {
+class CursorBlinkTimer with ChangeNotifier, WidgetsBindingObserver {
   late Timer timer;
   bool visible = false;
   // Indicates if we should keep the cursor on screen. This can be the case when:
@@ -52,11 +52,23 @@ class CursorBlinkTimer with ChangeNotifier {
 
   CursorBlinkTimer() {
     timer = Timer.periodic(const Duration(milliseconds: 500), timerTicks);
+    WidgetsBinding.instance.addObserver(this);
   }
 
   void timerTicks(Timer timer) {
     visible = !visible;
     notifyListeners();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.resumed) {
+      showNow();
+    } else {
+      visible = false;
+      timer.cancel();
+    }
   }
 
   void showNow() {
