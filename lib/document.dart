@@ -13,9 +13,8 @@ class TextSpanEx extends TextSpan {
 }
 
 class RenderTextResult {
-  // The text to be rendered, split into lines. If a selection is present, the text is also
-  // split at the location selection begins and ends. Each
-  final List<List<InlineSpan>> text;
+  // The text to be rendered
+  final List<InlineSpan> text;
 
   final List<PlaceholderDimensions> placeholderDimensions;
   // If we have any selection in the returned text, we indicate it here,
@@ -35,6 +34,8 @@ class DocumentLocation {
 class Document {
   List<String> lines = [''];
   List<double> widths = [];
+
+  List<Rect> selectionRects = [];
 
   DocumentLocation cursor = DocumentLocation(0, 0);
   DocumentLocation? anchor;
@@ -86,8 +87,44 @@ class Document {
     return true;
   }
 
+  List<Rect> getSelectionRects(int startLine, int lineCount, TextStyle style, Offset offset) {
+    List<Rect> rects = [];
+    var hasSel = hasSelection();
+    var selStart = getSelectionStart();
+    var selEnd = getSelectionEnd();
+    var offsetY = 0.0;
+    for (var i = 0; i < lineCount && (i + startLine) < lines.length; i++) {
+      var lineIdx = startLine + i;
+      if (hasSel && selStart.line <= lineIdx && lineIdx <= selEnd.line) {
+        var line = lines[lineIdx].characters;
+        var lineSelStart = lineIdx == selStart.line ? selStart.column : 0;
+        var lineSelEnd = lineIdx == selEnd.line ? selEnd.column : line.length;
+        assert(lineSelStart <= lineSelEnd);
+        var (prefixNotSelectedSegment, selectedSegment, suffixNotSelectedSegment) =
+            _splitLineInto(line, lineSelStart, lineSelEnd);
+        var prefixW = 0.0;
+        var selectedW = 0.0;
+        if (prefixNotSelectedSegment.isNotEmpty) {
+          tp.text = TextSpan(text: prefixNotSelectedSegment, style: style);
+          tp.layout();
+          prefixW = tp.width;
+        }
+        if (selectedSegment.isNotEmpty) {
+          tp.text = TextSpan(text: selectedSegment, style: style);
+          tp.layout();
+          selectedW = tp.width;
+        }
+        rects.add(Rect.fromLTRB(offset.dx + prefixW, offset.dy + offsetY, offset.dx + prefixW + selectedW,
+            offset.dy + offsetY + renderedGlyphHeight));
+      }
+      offsetY += renderedGlyphHeight;
+    }
+
+    return rects;
+  }
+
   RenderTextResult getText(int startLine, int lineCount, TextStyle style) {
-    List<List<InlineSpan>> ls = [];
+    List<InlineSpan> ls = [];
     // We should only have one widget, for the ime buffer
     List<PlaceholderDimensions> widgetWidths = [];
 
@@ -109,44 +146,28 @@ class Document {
 
     for (var i = 0; i < lineCount && (i + startLine) < lines.length; i++) {
       var relByteOffsetLoopStart = relByteOffset;
-      List<InlineSpan> newlist = [];
-      ls.add([]);
       var lineIdx = startLine + i;
       var line = lines[lineIdx].characters;
+
       if (cursor.line == startLine + i && imeBufferWidth > 0) {
         // Line contains IME buffer
         var firstTxt = line.take(cursor.column).toString();
         var secondText = line.skip(cursor.column).take(line.length - cursor.column).toString();
         (relByteOffset, hlIdx) =
-            _splitStringByHighlightsAndAddToList(firstTxt, newlist, relByteOffset, hlInfo, hlIdx, style, false);
+            _splitStringByHighlightsAndAddToList(firstTxt, ls, relByteOffset, hlInfo, hlIdx, style);
         // newlist.add(TextSpan(text: firstTxt, style: style));
         // Adds placeholder for IME editor buffer, sizing is set via widgetWidths list
-        newlist.add(WidgetSpan(child: const SizedBox(width: 0, height: 0), style: style));
+        ls.add(WidgetSpan(child: const SizedBox(width: 0, height: 0), style: style));
         widgetWidths.add(PlaceholderDimensions(size: Size(imeBufferWidth, 1), alignment: PlaceholderAlignment.middle));
         (relByteOffset, hlIdx) =
-            _splitStringByHighlightsAndAddToList(secondText, newlist, relByteOffset, hlInfo, hlIdx, style, false);
-      } else if (hasSel && selStart.line <= lineIdx && lineIdx <= selEnd.line) {
-        // Line is part of selection
-        var lineSelStart = lineIdx == selStart.line ? selStart.column : 0;
-        var lineSelEnd = lineIdx == selEnd.line ? selEnd.column : line.length;
-        assert(lineSelStart <= lineSelEnd);
-        var (prefixNotSelectedSegment, selectedSegment, suffixNotSelectedSegment) =
-            _splitLineInto(line, lineSelStart, lineSelEnd);
-        // If the cursor is before the first char on a given line, only suffix will be non-empty
-        (relByteOffset, hlIdx) = _splitStringByHighlightsAndAddToList(
-            prefixNotSelectedSegment, newlist, relByteOffset, hlInfo, hlIdx, style, false);
-        (relByteOffset, hlIdx) =
-            _splitStringByHighlightsAndAddToList(selectedSegment, newlist, relByteOffset, hlInfo, hlIdx, style, true);
-        (relByteOffset, hlIdx) = _splitStringByHighlightsAndAddToList(
-            suffixNotSelectedSegment, newlist, relByteOffset, hlInfo, hlIdx, style, false);
+            _splitStringByHighlightsAndAddToList(secondText, ls, relByteOffset, hlInfo, hlIdx, style);
       } else {
         (relByteOffset, hlIdx) =
-            _splitStringByHighlightsAndAddToList(line.toString(), newlist, relByteOffset, hlInfo, hlIdx, style, false);
+            _splitStringByHighlightsAndAddToList(line.toString(), ls, relByteOffset, hlInfo, hlIdx, style);
       }
-      newlist.add(TextSpanEx("\u2588", invisbleStyle, false, true, false));
-      newlist.add(TextSpanEx("\n", invisbleStyle, true, false, false));
-      ls[i] = newlist;
-      assert(relByteOffsetLoopStart + line.length == relByteOffset);
+      ls.add(TextSpanEx("\u2588", invisbleStyle, false, true, false));
+      ls.add(TextSpanEx("\n", invisbleStyle, true, false, false));
+      assert(relByteOffsetLoopStart + lines[lineIdx].length == relByteOffset);
     }
 
     return RenderTextResult(ls, widgetWidths, hasSel, selStart, selEnd);
@@ -426,7 +447,7 @@ class Document {
   }
 
   (int, int) _splitStringByHighlightsAndAddToList(String string, List<InlineSpan> spans, int lineByteOffset,
-      List<HighlightInfo> hlInfo, int hlIdx, TextStyle defaultText, bool isSelected) {
+      List<HighlightInfo> hlInfo, int hlIdx, TextStyle defaultText) {
     // var remaining = string;
     // var offset = lineByteOffset;
     // while (remaining.isNotEmpty && hlInfo.isNotEmpty) {
@@ -442,7 +463,7 @@ class Document {
     //   remaining = remaining.substring(snip.length);
     // }
     // // split text using info in hlInfo
-    spans.add(TextSpanEx(string, style, false, false, isSelected));
+    spans.add(TextSpanEx(string, style, false, false, false));
     // Returns the new byte offset after processing the segment, and as also return the index from
     // which we can begin in hlInfo, next time, skipping previously used entries.
 

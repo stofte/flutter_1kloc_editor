@@ -28,50 +28,14 @@ class EditorPainter extends CustomPainter {
     var lineCount = ((size.height - config.canvasMargin) / renderedGlyphHeight).ceil();
     var offset = Offset(config.canvasMargin - hOffset, config.canvasMargin + startVOffset);
     var textResult = doc.getText(startLine, lineCount, config.textStyle);
-    var offsetY = 0.0;
-    if (textResult.hasSelection) {
-      for (var i = 0; i < textResult.text.length; i++) {
-        var lineIdx = startLine + i;
-        if (textResult.selectionStart.line <= lineIdx && lineIdx <= textResult.selectionEnd.line) {
-          // We want to draw a box behind the selection, so we need to go
-          // into the text elements and see which ones are selected or not.
-          // We also do not care about the text after the selection ends, we do
-          // not needs it's size information.
+    var selectedRects = doc.getSelectionRects(startLine, lineCount, config.textStyle, offset);
 
-          List<InlineSpan> txtBeforeSel = [];
-          List<InlineSpan> txtSel = [];
-          var foundSelection = false;
-
-          for (var j = 0; j < textResult.text[i].length; j++) {
-            if (textResult.text[i][j] is TextSpanEx) {
-              var span = textResult.text[i][j] as TextSpanEx;
-              if (span.isNewline) {
-                continue;
-              }
-              if (span.isSelected) {
-                foundSelection = true;
-                txtSel.add(span);
-              } else if (!foundSelection) {
-                txtBeforeSel.add(span);
-              }
-            }
-          }
-
-          tp.text = TextSpan(children: txtBeforeSel, style: config.textStyle);
-          tp.layout();
-          var preSelectionW = tp.width;
-          tp.text = TextSpan(children: txtSel, style: config.textStyle);
-          tp.layout();
-          var selectionW = tp.width;
-          var rect = Rect.fromLTRB(offset.dx + preSelectionW, offset.dy + offsetY,
-              offset.dx + preSelectionW + selectionW, offset.dy + offsetY + renderedGlyphHeight);
-          canvas.drawRect(rect, config.selectionPaint);
-        }
-        offsetY += doc.renderedGlyphHeight;
-      }
+    for (var i = 0; i < selectedRects.length; i++) {
+      var r = selectedRects[i];
+      canvas.drawRect(r, config.selectionPaint);
     }
 
-    tp.text = TextSpan(children: textResult.text.expand((x) => x).toList());
+    tp.text = TextSpan(children: textResult.text);
     tp.setPlaceholderDimensions(textResult.placeholderDimensions);
     tp.layout();
     tp.paint(canvas, offset);
