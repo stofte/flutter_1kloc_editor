@@ -48,12 +48,14 @@ class _EditorState extends State<Editor> {
       if (!textController.value.isComposingRangeValid && newText.isNotEmpty) {
         textController.text = "";
         doc.doc.insertText(newText);
+        doc.doc.cursorImeWidth = 0;
         setState(() {
           imeWidth = 10;
         });
       } else {
         imePainter.text = TextSpan(text: newText, style: config.textStyle);
         imePainter.layout();
+        doc.doc.cursorImeWidth = imePainter.width;
         setState(() {
           imeWidth = imePainter.width + 10; // TODO: Fudged cursor width?
         });

@@ -22,6 +22,9 @@ class Document {
 
   DocumentLocation cursor = DocumentLocation(0, 0);
   DocumentLocation anchor = DocumentLocation(0, 0);
+  // When composing using IME, we have buffered input in the IME editor. It's not part of the document,
+  // but we need to account for it, such as giving it space when displaying the line being edited.
+  double cursorImeWidth = 0.0;
 
   TextDirection textDirection = TextDirection.ltr;
   TextStyle style;
