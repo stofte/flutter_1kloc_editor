@@ -6,7 +6,7 @@ import 'package:ffi/ffi.dart';
 
 class HighlightInfo {
   final int start;
-  final int length;
+  late int length;
   late String name;
   HighlightInfo(this.start, this.length, this.name);
 }
@@ -39,8 +39,8 @@ final class TSPoint extends ffi.Struct {
 }
 
 // 'initialize'
-typedef InitializeLib = ffi.Pointer Function(ffi.Bool);
-typedef InitializeDart = ffi.Pointer Function(bool);
+typedef InitializeLib = ffi.Pointer Function(ffi.Bool, ffi.Bool);
+typedef InitializeDart = ffi.Pointer Function(bool, bool);
 // 'set_language'
 typedef SetLanguageLib = ffi.Bool Function(ffi.Pointer, ffi.Uint32, ffi.Pointer<Utf8>, ffi.Uint32);
 typedef SetLanguageDart = bool Function(ffi.Pointer, int, ffi.Pointer<Utf8>, int);
@@ -88,6 +88,7 @@ class TreeSitter {
 
   List<HighlightInfo> _capturedHighlight = [];
   int _highlightStartByte = 0;
+  final Stopwatch stopwatch = Stopwatch();
 
   ffi.Pointer ctx = ffi.nullptr;
 
@@ -105,8 +106,8 @@ class TreeSitter {
     _hlcallback = NativeCallable<GetHighlightsCallback>.isolateLocal(_highlightsCallback);
   }
 
-  void initialize(bool logToStdout) {
-    ctx = _initialize(logToStdout);
+  void initialize(bool enableLogging, bool logToStdout) {
+    ctx = _initialize(enableLogging, logToStdout);
     if (ctx == ffi.nullptr) {
       throw Exception('Failed to initialize tree-sitter');
     }
@@ -145,8 +146,31 @@ class TreeSitter {
 
   void _highlightsCallback(int start, int length, int captureId, Pointer<Utf8> captureName) {
     var replacedOld = false;
-    assert(_highlightStartByte <= start);
-    start -= _highlightStartByte;
+    // print("HLCB: ${captureName.toDartString()}: $start/$length");
+
+    // If the start byte offset is in the middle of a token (esp a long one), the C library changes
+    // the start offset to be at the start of the given token, which means we can get start values,
+    // which are less than what we called with.
+
+    // For now we just adjust the highlight info instance, to match what we expect in the UI,
+    // and ignore that we're cutting into the middle of a syntax node.
+    // if (start < _highlightStartByte) {
+    //   var d = _highlightStartByte - start;
+    //   start = _highlightStartByte;
+    //   length -= d;
+    // }
+    // assert(_highlightStartByte <= start);
+    // start -= _highlightStartByte;
+
+    if (stopwatch.isRunning) {
+      stopwatch.stop();
+      print("Highlights/LIB: ${stopwatch.elapsedMicroseconds} us");
+    }
+
+    if (length <= 0) {
+      print("booboo");
+    }
+
     for (var i = 0; i < _capturedHighlight.length; i++) {
       if (start == _capturedHighlight[i].start) {
         assert(length == _capturedHighlight[i].length); // Assumption
@@ -165,6 +189,8 @@ class TreeSitter {
   }
 
   List<HighlightInfo> getHighlights(int startByte, int byteLength) {
+    stopwatch.reset();
+    stopwatch.start();
     // start by resetting the internal list of captures
     _capturedHighlight = [];
     _highlightStartByte = startByte;

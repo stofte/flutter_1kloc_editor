@@ -1,5 +1,7 @@
 import 'dart:io';
+import 'dart:math';
 
+import 'package:ffi/ffi.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_1kloc_editor/tree_sitter.dart';
 
@@ -32,6 +34,8 @@ class DocumentLocation {
 }
 
 class Document {
+  final stopwatch = Stopwatch();
+
   List<String> lines = [''];
   List<double> widths = [];
 
@@ -140,9 +144,26 @@ class Document {
     var selStart = getSelectionStart();
     var selEnd = getSelectionEnd();
 
+    stopwatch.reset();
+    stopwatch.start();
     var hlInfo = treeSitter.getHighlights(startLineByteOffset, endLineByteOffset - startLineByteOffset);
-    var relByteOffset = 0;
+    stopwatch.stop();
+    print("highlights: ${stopwatch.elapsedMicroseconds} us");
     var hlIdx = 0;
+    var relByteOffset = startLineByteOffset;
+    if (hlInfo.isNotEmpty && hlInfo.first.start < startLineByteOffset) {
+      for (var i = 0; i < hlInfo.length; i++) {
+        var bytesToChomp = startLineByteOffset - hlInfo[i].start;
+        if (hlInfo[i].length > bytesToChomp) {
+          // This hlinfo should be used for rendering, so we know we can stop now.
+          hlInfo[i].length -= bytesToChomp;
+          break;
+        } else {
+          // The current hlinfo is completely ellided, so we increment hlIdx
+          hlIdx++;
+        }
+      }
+    }
 
     for (var i = 0; i < lineCount && (i + startLine) < lines.length; i++) {
       var relByteOffsetLoopStart = relByteOffset;
@@ -154,20 +175,21 @@ class Document {
         var firstTxt = line.take(cursor.column).toString();
         var secondText = line.skip(cursor.column).take(line.length - cursor.column).toString();
         (relByteOffset, hlIdx) =
-            _splitStringByHighlightsAndAddToList(firstTxt, ls, relByteOffset, hlInfo, hlIdx, style);
+            _splitStringByHighlightsAndAddToList(firstTxt, ls, relByteOffset, hlInfo, hlIdx, style, false);
         // newlist.add(TextSpan(text: firstTxt, style: style));
         // Adds placeholder for IME editor buffer, sizing is set via widgetWidths list
         ls.add(WidgetSpan(child: const SizedBox(width: 0, height: 0), style: style));
         widgetWidths.add(PlaceholderDimensions(size: Size(imeBufferWidth, 1), alignment: PlaceholderAlignment.middle));
         (relByteOffset, hlIdx) =
-            _splitStringByHighlightsAndAddToList(secondText, ls, relByteOffset, hlInfo, hlIdx, style);
+            _splitStringByHighlightsAndAddToList(secondText, ls, relByteOffset, hlInfo, hlIdx, style, true);
       } else {
         (relByteOffset, hlIdx) =
-            _splitStringByHighlightsAndAddToList(line.toString(), ls, relByteOffset, hlInfo, hlIdx, style);
+            _splitStringByHighlightsAndAddToList(line.toString(), ls, relByteOffset, hlInfo, hlIdx, style, true);
       }
       ls.add(TextSpanEx("\u2588", invisbleStyle, false, true, false));
       ls.add(TextSpanEx("\n", invisbleStyle, true, false, false));
-      assert(relByteOffsetLoopStart + lines[lineIdx].length == relByteOffset);
+      assert(relByteOffsetLoopStart + lines[lineIdx].length + 1 == relByteOffset);
+      // relByteOffset++; // newline
     }
 
     return RenderTextResult(ls, widgetWidths, hasSel, selStart, selEnd);
@@ -441,32 +463,72 @@ class Document {
   int _getLineByteOffset(int line) {
     var offset = 0;
     for (var i = 0; i < line && i < lines.length; i++) {
-      offset += lines[i].length;
+      offset += lines[i].length + 1;
     }
     return offset;
   }
 
-  (int, int) _splitStringByHighlightsAndAddToList(String string, List<InlineSpan> spans, int lineByteOffset,
-      List<HighlightInfo> hlInfo, int hlIdx, TextStyle defaultText) {
-    // var remaining = string;
-    // var offset = lineByteOffset;
-    // while (remaining.isNotEmpty && hlInfo.isNotEmpty) {
-    //   // While we have more string to match against, and we still have HL info items
-    //   var hl = hlInfo.first;
-    //   if (hl.start > offset) {
-    //     var snip = remaining.substring(0, hl.start - offset);
-    //     remaining = remaining.substring(snip.length);
-    //     spans.add(TextSpanEx(snip, style, false, false, isSelected));
-    //   }
-    //   var snip = remaining.substring(0, hl.length);
-    //   spans.add(TextSpanEx(snip, style, false, false, isSelected));
-    //   remaining = remaining.substring(snip.length);
-    // }
-    // // split text using info in hlInfo
-    spans.add(TextSpanEx(string, style, false, false, false));
+  (int, int) _splitStringByHighlightsAndAddToList(String string, List<InlineSpan> spans, int byteOffset,
+      List<HighlightInfo> hlInfo, int hlIdx, TextStyle defaultText, bool newlineFollows) {
+    var remaining = string;
+    var remainingHlInfo = false;
+
+    while (remaining.isNotEmpty && hlIdx < hlInfo.length) {
+      var hl = hlInfo[hlIdx];
+      remainingHlInfo = false;
+      if (hl.start > byteOffset) {
+        // Text before the next hlInfo starts, eg whitespace, etc.
+        var maxRemaining = min(hl.start - byteOffset, remaining.length);
+        var snip = remaining.substring(0, maxRemaining);
+        assert(snip.isNotEmpty);
+        // print("HL: $snip (default)");
+        spans.add(TextSpanEx(snip, defaultText, false, false, false));
+        remaining = remaining.substring(snip.length);
+        byteOffset += snip.length;
+        continue;
+      }
+
+      if (hl.length < 0) {
+        print("booboo!");
+      }
+
+      var snipLength = hl.length;
+      if (hl.length > remaining.length) {
+        snipLength = remaining.length;
+      }
+
+      var snip = remaining.substring(0, snipLength);
+      var s = style.copyWith(color: syntaxColoring[hl.name]);
+      spans.add(TextSpanEx(snip, s, false, false, false));
+      byteOffset += snip.length;
+      hl.length -= snipLength;
+      remaining = remaining.substring(snip.length);
+
+      assert(hl.length >= 0);
+      if (hl.length <= 0) {
+        hlIdx++;
+      } else {
+        remainingHlInfo = true;
+      }
+    }
+
+    if (remaining.isNotEmpty) {
+      spans.add(TextSpanEx(remaining, defaultText, false, false, false));
+      byteOffset += remaining.length;
+    }
+
+    // we chop one from the length, due to newlines.
+    // this really needs some other fix. the newline
+    // can potentially not be part of any hlinfo, so
+    // this is somewhat tricky.
+
+    // ideally, we would not have the buffer be line based.
+    if (hlIdx < hlInfo.length && hlInfo[hlIdx].length > 0 && newlineFollows && remainingHlInfo) {
+      hlInfo[hlIdx].length--;
+    }
+
     // Returns the new byte offset after processing the segment, and as also return the index from
     // which we can begin in hlInfo, next time, skipping previously used entries.
-
-    return (lineByteOffset + string.length, hlIdx);
+    return (byteOffset + (newlineFollows ? 1 : 0), hlIdx);
   }
 }

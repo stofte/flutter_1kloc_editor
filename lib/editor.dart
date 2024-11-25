@@ -13,21 +13,21 @@ class Editor extends StatefulWidget {
   final TreeSitter treeSitter = TreeSitter('tslib.dll', TreeSitterEncoding.Utf8,
       {TreeSitterLanguage.c: "scm\\c.scm", TreeSitterLanguage.javascript: "scm\\javascript.scm"});
   final Map<String, Color> syntaxConfig = {
-    "comment": Color(0xFFF1701F),
+    "comment": Colors.grey,
     "constant": Color(0xFFB98853),
-    "delimiter": Color(0xFFAA53D1),
-    "function": Color(0xFF43249F),
+    "delimiter": Colors.yellow,
+    "function": Colors.red,
     "keyword": Color(0xFF118EE8),
-    "number": Color(0xFF334AEE),
+    "number": Colors.black,
     "operator": Color(0xFF9A28D1),
     "property": Color(0xFF1974DD),
     "string": Color(0xFF67D827),
-    "type": Color(0xFF9F25C5),
-    "variable": Color(0xFF378B8A)
+    "type": Colors.orange,
+    "variable": Color(0xFF378B8A),
   };
 
   Editor({super.key, required this.path}) {
-    treeSitter.initialize(false);
+    treeSitter.initialize(false, false);
   }
 
   @override
