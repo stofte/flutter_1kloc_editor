@@ -53,6 +53,13 @@ class _EditorState extends State<Editor> {
     config = EditorConfig(textStyle, 5.0);
     doc = DocumentProvider(config.textStyle);
     notifier = EditorNotifier(doc, vScroll, hScroll);
+    FocusManager.instance.addListener(() {
+      // TODO: This will likely have to change, if the editor widget is embedded in a full app
+      var fn = FocusManager.instance.primaryFocus;
+      if (fn != imeFocusNode && buildCalled > 1) {
+        imeFocusNode.requestFocus();
+      }
+    });
 
     // setState triggers new build call when eg size of document changes
     doc.addListener(() => setState(() {}));
@@ -104,6 +111,33 @@ class _EditorState extends State<Editor> {
     isMouseDown = false;
   }
 
+  void onKeyEvent(KeyEvent event) {
+    if (event.runtimeType == KeyDownEvent || event.runtimeType == KeyRepeatEvent) {
+      if (event.runtimeType == KeyDownEvent) {
+        imeFocusNode.requestFocus();
+      }
+      var movedCursor = false;
+      switch (event.logicalKey.keyLabel) {
+        case 'Arrow Left':
+          movedCursor = doc.doc.moveCursorLeft();
+          break;
+        case 'Arrow Right':
+          movedCursor = doc.doc.moveCursorRight();
+          break;
+        case 'Arrow Up':
+          movedCursor = doc.doc.moveCursorUp();
+          break;
+        case 'Arrow Down':
+          movedCursor = doc.doc.moveCursorDown();
+          break;
+      }
+      if (movedCursor) {
+        adjustScrollbarsAfterCursorMovement();
+        setState(() {});
+      }
+    }
+  }
+
   void adjustScrollbarsAfterCursorMovement() {
     var scrollViewBox = editorViewBox.currentContext!.findRenderObject() as RenderBox;
     var svHeight = scrollViewBox.size.height;
@@ -125,15 +159,13 @@ class _EditorState extends State<Editor> {
     }
   }
 
+  int buildCalled = 0;
+
   @override
   Widget build(BuildContext context) {
     stopwatch.reset();
 
-    // TODO: Fix this to be less hacky.
-    // Only true after initial build?
-    if (imeFocusNode.hasListeners) {
-      imeFocusNode.requestFocus();
-    }
+    buildCalled++;
 
     var winSize = MediaQuery.of(context).size;
     var cursorOffsetAbs = doc.doc.getCursorOffset();
@@ -148,29 +180,7 @@ class _EditorState extends State<Editor> {
     codeSize = Size(codeSize.width + (config.canvasMargin * 2), codeSize.height + (config.canvasMargin * 2));
     var ui = KeyboardListener(
       focusNode: keyboardFocus,
-      onKeyEvent: (event) {
-        if (event.runtimeType == KeyDownEvent || event.runtimeType == KeyRepeatEvent) {
-          var movedCursor = false;
-          switch (event.logicalKey.keyLabel) {
-            case 'Arrow Left':
-              movedCursor = doc.doc.moveCursorLeft();
-              break;
-            case 'Arrow Right':
-              movedCursor = doc.doc.moveCursorRight();
-              break;
-            case 'Arrow Up':
-              movedCursor = doc.doc.moveCursorUp();
-              break;
-            case 'Arrow Down':
-              movedCursor = doc.doc.moveCursorDown();
-              break;
-          }
-          if (movedCursor) {
-            adjustScrollbarsAfterCursorMovement();
-            setState(() {});
-          }
-        }
-      },
+      onKeyEvent: onKeyEvent,
       child: Listener(
         onPointerDown: onPointerDown,
         onPointerMove: onPointerMove,
