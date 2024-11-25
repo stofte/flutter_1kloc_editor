@@ -148,7 +148,7 @@ class Document {
     stopwatch.start();
     var hlInfo = treeSitter.getHighlights(startLineByteOffset, endLineByteOffset - startLineByteOffset);
     stopwatch.stop();
-    print("highlights: ${stopwatch.elapsedMicroseconds} us");
+
     var hlIdx = 0;
     var relByteOffset = startLineByteOffset;
     if (hlInfo.isNotEmpty && hlInfo.first.start < startLineByteOffset) {

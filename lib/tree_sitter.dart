@@ -146,25 +146,9 @@ class TreeSitter {
 
   void _highlightsCallback(int start, int length, int captureId, Pointer<Utf8> captureName) {
     var replacedOld = false;
-    // print("HLCB: ${captureName.toDartString()}: $start/$length");
-
-    // If the start byte offset is in the middle of a token (esp a long one), the C library changes
-    // the start offset to be at the start of the given token, which means we can get start values,
-    // which are less than what we called with.
-
-    // For now we just adjust the highlight info instance, to match what we expect in the UI,
-    // and ignore that we're cutting into the middle of a syntax node.
-    // if (start < _highlightStartByte) {
-    //   var d = _highlightStartByte - start;
-    //   start = _highlightStartByte;
-    //   length -= d;
-    // }
-    // assert(_highlightStartByte <= start);
-    // start -= _highlightStartByte;
 
     if (stopwatch.isRunning) {
       stopwatch.stop();
-      print("Highlights/LIB: ${stopwatch.elapsedMicroseconds} us");
     }
 
     if (length <= 0) {
