@@ -54,7 +54,10 @@ class _EditorState extends State<Editor> {
       fontFamily: "Consolas",
       fontSize: 15,
     );
-    config = EditorConfig(textStyle, 5.0);
+    var selectionPaint = Paint();
+    selectionPaint.color = Colors.lightBlue.shade200;
+    selectionPaint.style = PaintingStyle.fill;
+    config = EditorConfig(textStyle, selectionPaint, 5.0);
     doc = DocumentProvider(config.textStyle);
     notifier = EditorNotifier(doc, vScroll, hScroll);
     FocusManager.instance.addListener(() {
@@ -108,7 +111,8 @@ class _EditorState extends State<Editor> {
       return;
     }
     var offset = mapFromPointer(event.localPosition);
-    if (doc.doc.setCursorFromOffset(offset)) {
+    if (doc.doc.setCursorFromOffset(offset, true)) {
+      cursorBlinkTimer.showNow();
       doc.touch();
     }
     isMouseDown = true;
@@ -117,7 +121,8 @@ class _EditorState extends State<Editor> {
   void onPointerMove(PointerMoveEvent event) {
     if (isMouseDown) {
       var offset = mapFromPointer(event.localPosition);
-      if (doc.doc.setCursorFromOffset(offset)) {
+      if (doc.doc.setCursorFromOffset(offset, false)) {
+        cursorBlinkTimer.showNow();
         doc.touch();
       }
     }

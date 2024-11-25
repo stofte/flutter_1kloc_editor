@@ -6,14 +6,6 @@ class DocumentLocation {
   int line;
   int column;
   DocumentLocation(this.line, this.column);
-
-  @override
-  bool operator ==(covariant DocumentLocation other) {
-    return other.line == line && other.column == column;
-  }
-
-  @override
-  int get hashCode => line.hashCode ^ column.hashCode;
 }
 
 class Document {
@@ -21,7 +13,7 @@ class Document {
   List<double> widths = [];
 
   DocumentLocation cursor = DocumentLocation(0, 0);
-  DocumentLocation anchor = DocumentLocation(0, 0);
+  DocumentLocation? anchor;
   // When composing using IME, we have buffered input in the IME editor. It's not part of the document,
   // but we need to account for it, such as giving it space when displaying the line being edited.
   double imeBufferWidth = 0;
@@ -85,7 +77,13 @@ class Document {
     return Offset(tp.width, cursor.line * renderedGlyphHeight);
   }
 
-  bool setCursorFromOffset(Offset offset) {
+  bool setCursorFromOffset(Offset offset, bool initial) {
+    if (initial) {
+      // Clears anchor on initial
+      anchor = null;
+    } else {
+      anchor ??= DocumentLocation(cursor.line, cursor.column);
+    }
     // Assumes that the offset has been adjusted for canvas margins, etc
     var lineNum = (offset.dy / renderedGlyphHeight).floor();
     if (lineNum < 0) {
@@ -144,6 +142,35 @@ class Document {
       return true;
     }
     return false;
+  }
+
+  bool hasSelection() {
+    return anchor != null && (cursor.line != anchor?.line || cursor.column != anchor?.column);
+  }
+
+  DocumentLocation getSelectionStart() {
+    return _getSelectionStartOrEnd(true);
+  }
+
+  DocumentLocation getSelectionEnd() {
+    return _getSelectionStartOrEnd(false);
+  }
+
+  DocumentLocation _getSelectionStartOrEnd(bool start) {
+    if (anchor != null) {
+      // Should never be -1, but dart does not seem clever enough here?
+      var aLine = anchor?.line ?? -1;
+      var aCol = anchor?.column ?? -1;
+      var anchor2 = DocumentLocation(aLine, aCol);
+      if (anchor2.line < cursor.line || anchor2.line == cursor.line && anchor2.column < cursor.column) {
+        // anchor is before cursor:
+        return start ? anchor2 : cursor;
+      } else {
+        return start ? cursor : anchor2;
+      }
+    } else {
+      return cursor;
+    }
   }
 
   double _currentColOffset() {
