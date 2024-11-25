@@ -90,6 +90,12 @@ class _EditorState extends State<Editor> {
         doc.doc.imeBufferWidth = imePainter.width;
         newImeWidth = imePainter.width + 10; // TODO: Fudged cursor width?
         if (newText.isNotEmpty) {
+          // If we come here, it must be because we are composing,
+          // so we should be delete the current selection (if any)
+          assert(textController.value.isComposingRangeValid);
+          if (doc.doc.hasSelection()) {
+            doc.doc.insertText("");
+          }
           // Determine the offset the cursor is at, only if we have something.
           var textBeforeCursor = newText.characters.take(textController.selection.baseOffset).toString();
           imePainter.text = TextSpan(text: textBeforeCursor, style: config.textStyle);
