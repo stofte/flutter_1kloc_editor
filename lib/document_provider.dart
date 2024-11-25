@@ -6,8 +6,8 @@ class DocumentProvider extends ChangeNotifier {
   TextStyle textStyle;
   late Document doc;
 
-  DocumentProvider(this.textStyle, TreeSitter treeSitter) {
-    doc = Document(textStyle, treeSitter);
+  DocumentProvider(this.textStyle, TreeSitter treeSitter, Map<String, Color> syntaxColoring) {
+    doc = Document(textStyle, treeSitter, syntaxColoring);
   }
 
   Future<bool> openFile(String path) async {

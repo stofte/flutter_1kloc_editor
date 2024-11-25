@@ -60,7 +60,9 @@ class Document {
 
   final TreeSitter treeSitter;
 
-  Document(this.style, this.treeSitter) {
+  Map<String, Color> syntaxColoring;
+
+  Document(this.style, this.treeSitter, this.syntaxColoring) {
     tp = TextPainter(textDirection: textDirection);
     // More flutter snafu, must have at least two lines of text. There is presumably
     // something going on between the lines which is messing with the algorithm.

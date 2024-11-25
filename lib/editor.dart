@@ -12,6 +12,19 @@ class Editor extends StatefulWidget {
   final String path;
   final TreeSitter treeSitter = TreeSitter('tslib.dll', TreeSitterEncoding.Utf8,
       {TreeSitterLanguage.c: "scm\\c.scm", TreeSitterLanguage.javascript: "scm\\javascript.scm"});
+  final Map<String, Color> syntaxConfig = {
+    "comment": Color(0xFFF1701F),
+    "constant": Color(0xFFB98853),
+    "delimiter": Color(0xFFAA53D1),
+    "function": Color(0xFF43249F),
+    "keyword": Color(0xFF118EE8),
+    "number": Color(0xFF334AEE),
+    "operator": Color(0xFF9A28D1),
+    "property": Color(0xFF1974DD),
+    "string": Color(0xFF67D827),
+    "type": Color(0xFF9F25C5),
+    "variable": Color(0xFF378B8A)
+  };
 
   Editor({super.key, required this.path}) {
     treeSitter.initialize(false);
@@ -64,8 +77,8 @@ class _EditorState extends State<Editor> {
     selectionPaint.color = Colors.lightBlue.shade200;
     selectionPaint.style = PaintingStyle.fill;
     selectionPaint.isAntiAlias = false;
-    config = EditorConfig(textStyle, selectionPaint, 5.0);
-    doc = DocumentProvider(config.textStyle, this.widget.treeSitter);
+    config = EditorConfig(textStyle, selectionPaint, 5.0, widget.syntaxConfig);
+    doc = DocumentProvider(config.textStyle, this.widget.treeSitter, config.syntaxColoring);
     notifier = EditorNotifier(doc, vScroll, hScroll);
     FocusManager.instance.addListener(() {
       // TODO: This will likely have to change, if the editor widget is embedded in a full app

@@ -6,6 +6,7 @@ class EditorConfig {
   Paint selectionPaint;
   // Margins around the canvas, before anything is rendered
   double canvasMargin;
+  Map<String, Color> syntaxColoring;
 
-  EditorConfig(this.textStyle, this.selectionPaint, this.canvasMargin);
+  EditorConfig(this.textStyle, this.selectionPaint, this.canvasMargin, this.syntaxColoring);
 }
